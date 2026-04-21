@@ -12,6 +12,36 @@ import (
 	"time"
 )
 
+func TestNullSourceReturnsOnContextCancel(t *testing.T) {
+	t.Parallel()
+
+	source := NewNullSource()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- source.Run(ctx, func(string) error {
+			t.Error("null source must not emit events")
+			return nil
+		})
+	}()
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Run() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not return after ctx cancel")
+	}
+
+	if err := source.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+}
+
 func TestReaderSourceEmitsLines(t *testing.T) {
 	t.Parallel()
 

@@ -104,6 +104,12 @@ func newSource(cfg config.Config, stdin io.Reader) (input.Source, error) {
 	if cfg.SocketPath != "" {
 		return input.NewUnixSocketSource(cfg.SocketPath)
 	}
+	// If stdin is an interactive TTY, Bubble Tea is already reading it for
+	// keystrokes (including ctrl-c). A bufio.Scanner on the same fd would
+	// race with the key reader and eat the keystrokes, so skip it.
+	if f, ok := stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		return input.NewNullSource(), nil
+	}
 	return input.NewReaderSource(stdin), nil
 }
 

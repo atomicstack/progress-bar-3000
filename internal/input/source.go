@@ -25,6 +25,22 @@ func NewReaderSource(r io.Reader) Source {
 	return &readerSource{r: r}
 }
 
+// NewNullSource returns a source that produces no events and exits only when
+// its context is cancelled. Use when stdin is owned by the renderer (e.g. the
+// TTY is being read by Bubble Tea for key input) so we don't steal bytes.
+func NewNullSource() Source {
+	return nullSource{}
+}
+
+type nullSource struct{}
+
+func (nullSource) Run(ctx context.Context, _ func(string) error) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (nullSource) Close() error { return nil }
+
 func (s *readerSource) Run(ctx context.Context, emit func(string) error) error {
 	scanner := bufio.NewScanner(s.r)
 	for scanner.Scan() {
