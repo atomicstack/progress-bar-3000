@@ -1,0 +1,4 @@
+.gocache/
+.gomodcache/
+dist/
+progress-bar-3000
