@@ -109,10 +109,14 @@ func newSource(cfg config.Config, stdin io.Reader) (input.Source, error) {
 
 func autoProfile() render.Profile {
 	switch termenv.EnvColorProfile() {
+	case termenv.TrueColor:
+		return render.ProfileTrueColor
 	case termenv.ANSI256:
 		return render.Profile256
-	case termenv.Ascii:
+	case termenv.ANSI:
 		return render.Profile16
+	case termenv.Ascii:
+		return render.ProfileNone
 	default:
 		return render.ProfileTrueColor
 	}
