@@ -121,14 +121,21 @@ When the agent is already running inside a multiplexer (`[ -n "$TMUX" ]`), the b
 if [[ -n "${TMUX-}" ]]; then
   sock="$(mktemp -u -t pb3.XXXXXX).sock"
 
+  # size the bar to fill the window. -8 leaves room for " NN% phase"
+  # after the bar when --detail is on; raise the subtracted value if you
+  # use a custom --format with more trailing tokens.
+  bar_width=$(($(tmux display-message -p -t "$TMUX_PANE" '#{window_width}') - 8))
+  (( bar_width < 10 )) && bar_width=10
+
   # -d  : don't steal focus — keep the agent's pane active
   # -f  : span the full window width (not just the active pane's width)
   # -b  : above the target; drop -b for a pane at the bottom
   # -v  : vertical split (panes stacked), -l 3 = 3 rows tall
   # -P -F '#{pane_id}' echoes the new pane id so we can kill it later
-  # ${sock@Q} / ${n@Q} shell-quote the values since tmux reparses via sh -c
-  pane="$(tmux split-window -d -f -b -v -l 3 -P -F '#{pane_id}' \
-    "./progress-bar-3000 --socket-path ${sock@Q} --total ${n@Q} --detail --width 40")"
+  # pre-quote the child command with printf '%q' since tmux reparses via sh -c;
+  # printf '%q' works in bash and zsh, unlike ${var@Q} (bash 4.4+ only).
+  cmd=$(printf '%q ' ./progress-bar-3000 --socket-path "$sock" --total "$n" --detail --width "$bar_width")
+  pane="$(tmux split-window -d -f -b -v -l 3 -P -F '#{pane_id}' "$cmd")"
 
   # wait for the renderer to bind the socket before sending events
   until [[ -S "$sock" ]]; do sleep 0.05; done
@@ -147,6 +154,7 @@ Key points:
 
 - `-d -f -b -v -l 3` → 3-row full-width pane at the top, agent's pane keeps focus. Drop `-b` for bottom.
 - `-P -F '#{pane_id}'` prints the new pane id (e.g. `%42`) — capture it so you can target `tmux kill-pane -t` later.
+- size `--width` from `#{window_width}` (minus a small reserve for the trailing percent / phase tokens), not a fixed literal — hardcoding 40 on a 195-column window leaves most of the bar empty.
 - wait for the socket file to appear before the first `nc -U`; the renderer takes a frame or two to bind.
 - use a unique socket path per run (`mktemp -u`) so concurrent agent runs don't collide.
 - without `$TMUX`, fall back to inline piped mode (pattern A below) rather than trying to split something that isn't there.
