@@ -66,6 +66,14 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		// Bubble Tea opens /dev/tty and puts it in raw mode when stdin is a
+		// pipe, which means ctrl-c arrives as a key event instead of SIGINT.
+		// Forward it to Quit explicitly so the bar is interruptible.
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		return m, nil
 	case eventMsg:
 		previousDisplay := m.state.DisplayValue
 		m.state.Apply(msg.Event, msg.Now)
