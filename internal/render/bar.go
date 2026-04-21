@@ -111,6 +111,9 @@ func colorizeBackground(opts Options, index int, bgRune rune) string {
 	}
 
 	base := gradientColor(opts, index)
+	if boost := shimmerBoost(opts, index); boost > 0 {
+		base = BlendTowardWhite(base, boost*0.25)
+	}
 	bgColor := trackColor(base)
 	fgColor := BlendTowardWhite(bgColor, 0.28)
 	return Background(opts.Profile, bgColor) + Foreground(opts.Profile, fgColor) + cell + Reset()
@@ -121,14 +124,29 @@ func animatedFillColor(opts Options, index int) RGB {
 	if opts.Pulse > 0 {
 		color = BlendTowardWhite(color, opts.Pulse)
 	}
-	if opts.ShimmerPhase >= 0 {
-		position := opts.ShimmerPhase * float64(maxInt(opts.Width-1, 1))
-		dist := math.Abs(float64(index) - position)
-		if dist < 3 {
-			color = BlendTowardWhite(color, (1-(dist/3))*0.45)
-		}
+	if boost := shimmerBoost(opts, index); boost > 0 {
+		color = BlendTowardWhite(color, boost*0.45)
 	}
 	return color
+}
+
+// shimmerBoost returns a 0..1 intensity for a bright band sweeping across the
+// bar. The band travels from just off the left edge to just off the right
+// edge (rather than wrapping instantly), so it enters and exits smoothly.
+// Cosine falloff keeps the band soft instead of a hard triangle.
+const shimmerMargin = 4.0
+
+func shimmerBoost(opts Options, index int) float64 {
+	if opts.ShimmerPhase < 0 {
+		return 0
+	}
+	travel := float64(opts.Width) + 2*shimmerMargin
+	position := -shimmerMargin + opts.ShimmerPhase*travel
+	dist := math.Abs(float64(index) - position)
+	if dist >= shimmerMargin {
+		return 0
+	}
+	return 0.5 * (1 + math.Cos(math.Pi*dist/shimmerMargin))
 }
 
 func gradientColor(opts Options, index int) RGB {
@@ -141,15 +159,36 @@ func gradientColor(opts Options, index int) RGB {
 		end = RGB{R: 0, G: 135, B: 255}
 	}
 
-	return lerp(start, end, shiftedIndex(index, maxInt(opts.Width-1, 1), opts.GradientShift), maxInt(opts.Width-1, 1))
+	width := float64(maxInt(opts.Width-1, 1))
+	t := float64(index) / width
+	if opts.GradientShift != 0 {
+		// The configured gradient is start→end (not cyclic), so rotating a
+		// simple offset creates a visible seam where end jumps back to start.
+		// Fold the shifted position through a triangle wave (start→end→start)
+		// so it tiles seamlessly as the shift sweeps around.
+		u := math.Mod(t+opts.GradientShift, 1.0)
+		if u < 0 {
+			u += 1
+		}
+		if u > 0.5 {
+			u = 1 - u
+		}
+		t = 2 * u
+	}
+	return lerpRGB(start, end, t)
 }
 
 func trackColor(fill RGB) RGB {
 	return Scale(fill, 0.18)
 }
 
-func lerp(a, b RGB, index, width int) RGB {
-	t := float64(index) / float64(width)
+func lerpRGB(a, b RGB, t float64) RGB {
+	if t < 0 {
+		t = 0
+	}
+	if t > 1 {
+		t = 1
+	}
 	return RGB{
 		R: uint8(float64(a.R) + (float64(b.R)-float64(a.R))*t),
 		G: uint8(float64(a.G) + (float64(b.G)-float64(a.G))*t),
@@ -162,15 +201,4 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
-}
-
-func shiftedIndex(index, width int, shift float64) int {
-	if shift == 0 || width <= 0 {
-		return index
-	}
-	normalized := math.Mod((float64(index)/float64(width))+shift, 1.0)
-	if normalized < 0 {
-		normalized += 1
-	}
-	return int(math.Round(normalized * float64(width)))
 }

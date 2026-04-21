@@ -36,6 +36,7 @@ type Model struct {
 	state    progress.State
 	detail   bool
 	frame    int
+	elapsed  float64
 	err      error
 }
 
@@ -74,6 +75,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case frameMsg:
 		m.frame++
+		// Seconds-since-epoch as the animation phase reference. This keeps
+		// animations time-based (so they don't change speed with --fps) and
+		// deterministic for tests that inject specific Now values.
+		m.elapsed = float64(msg.Now.UnixNano()) / 1e9
 		gap := m.state.Value - m.state.DisplayValue
 		if math.Abs(gap) < 0.001 {
 			m.state.DisplayValue = m.state.Value
@@ -93,7 +98,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	resolver := resolver{cfg: m.cfg, state: m.state, frame: m.frame}
+	resolver := resolver{cfg: m.cfg, state: m.state, elapsed: m.elapsed}
 	line := m.template.Render(resolver)
 	if !m.detail {
 		return line
@@ -108,9 +113,9 @@ func (m Model) View() string {
 }
 
 type resolver struct {
-	cfg   config.Config
-	state progress.State
-	frame int
+	cfg     config.Config
+	state   progress.State
+	elapsed float64
 }
 
 func (r resolver) Resolve(name string, width int) string {
@@ -125,7 +130,7 @@ func (r resolver) Resolve(name string, width int) string {
 			}
 		}
 		start, end := animatedGradient(r.cfg)
-		pulse, shimmer, shift := animationState(r.cfg, r.frame)
+		pulse, shimmer, shift := animationState(r.cfg, r.elapsed)
 		return render.RenderBar(render.Options{
 			Width:           barWidth,
 			Percent:         clampPercent(r.state.DisplayValue, r.state.Total),
@@ -173,17 +178,30 @@ func animatedGradient(cfg config.Config) (render.RGB, render.RGB) {
 	return start, end
 }
 
-func animationState(cfg config.Config, frame int) (pulse float64, shimmerPhase float64, gradientShift float64) {
+// animationState returns per-frame animation inputs derived from wall-clock
+// elapsed seconds, so the visual pacing is independent of the configured FPS.
+func animationState(cfg config.Config, elapsed float64) (pulse float64, shimmerPhase float64, gradientShift float64) {
 	shimmerPhase = -1
 	switch cfg.TintAnimation {
 	case config.TintAnimationPulse:
-		pulse = 0.10 + (0.16 * (0.5 + 0.5*math.Sin(float64(frame)*0.45)))
+		// 2.5s breath from 0 (natural colour) to 0.18 (brighter). Using
+		// (1 - cos) rather than sin keeps the minimum at exactly the
+		// original tint rather than leaving it permanently washed out.
+		pulse = 0.09 * (1 - math.Cos(2*math.Pi*elapsed/2.5))
 	case config.TintAnimationCycle:
-		gradientShift = math.Mod(float64(frame)*0.08, 1.0)
+		gradientShift = wrapUnit(elapsed / 4.0)
 	case config.TintAnimationShimmer:
-		shimmerPhase = math.Mod(float64(frame)*0.08, 1.0)
+		shimmerPhase = wrapUnit(elapsed / 2.8)
 	}
 	return pulse, shimmerPhase, gradientShift
+}
+
+func wrapUnit(x float64) float64 {
+	v := math.Mod(x, 1.0)
+	if v < 0 {
+		v += 1
+	}
+	return v
 }
 
 func clampPercent(value float64, total int) float64 {
