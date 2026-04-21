@@ -1,0 +1,6 @@
+{
+  "name": "progress-bar-3000",
+  "version": "0.1.0",
+  "description": "Terminal progress bar renderer and the skill that teaches agents how to drive it.",
+  "keywords": ["progress", "cli", "terminal", "bubbletea"]
+}

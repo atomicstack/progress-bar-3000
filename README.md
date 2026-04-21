@@ -2,6 +2,13 @@
 
 A renderer-only Go CLI for progress bars in shell scripts.
 
+This repo also ships as a Claude Code plugin: `.claude-plugin/plugin.json`
+declares the plugin, and `skills/progress-bar-3000/SKILL.md` contains the skill
+that teaches agents how to drive the tool. Build the binary with `make build`
+before invoking the skill; the skill resolves the binary via
+`$CLAUDE_PLUGIN_ROOT/progress-bar-3000` when installed as a plugin, or
+`./progress-bar-3000` in a repo checkout.
+
 ## Features
 
 - Bubble Tea rendering in compact or detail mode
