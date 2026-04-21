@@ -3,8 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/progress-bar-3000-smoke.XXXXXX")"
-BIN_PATH="${TMP_DIR}/progress-bar-3000"
+BIN_PATH="${ROOT_DIR}/progress-bar-3000"
 SOCKET_PATH="/tmp/pb3-smoke-$$.sock"
 GOCACHE_DIR="${ROOT_DIR}/.gocache"
 GOMODCACHE_DIR="${ROOT_DIR}/.gomodcache"
@@ -19,7 +18,6 @@ cleanup() {
 		wait "${SOCKET_PID}" 2>/dev/null || true
 	fi
 	rm -f "${SOCKET_PATH}"
-	rm -rf "${TMP_DIR}"
 }
 
 trap cleanup EXIT
@@ -34,6 +32,30 @@ pause_between_steps() {
 
 section() {
 	printf '\n== %s ==\n' "$1"
+}
+
+# Render a command array as a single, copy-pasteable line. Each argument is
+# shell-quoted so what is printed matches what is executed exactly.
+render_cmd() {
+	local rendered
+	rendered="$(printf '%q ' "$@")"
+	printf '%s' "${rendered% }"
+}
+
+# announce <prefix> -- <cmd...>
+#
+# Prints "Command: <prefix><rendered cmd>\n\n". Use with an empty prefix for
+# standalone invocations, or a pipeline prefix like "printf ... | " when the
+# scenario pipes data into the binary.
+announce() {
+	local prefix="$1"
+	shift
+	if [[ "$1" != "--" ]]; then
+		printf 'announce: expected -- separator, got %q\n' "$1" >&2
+		return 2
+	fi
+	shift
+	printf 'Command: %s%s\n\n' "${prefix}" "$(render_cmd "$@")"
 }
 
 compute_terminal_width() {
@@ -87,30 +109,37 @@ mkdir -p "${GOCACHE_DIR}" "${GOMODCACHE_DIR}"
 BAR_WIDTH="$(compute_bar_width)"
 
 section "Build"
-printf 'Building binary at %s\n' "${BIN_PATH}"
-(
-	cd "${ROOT_DIR}"
-	GOCACHE="${GOCACHE_DIR}" GOMODCACHE="${GOMODCACHE_DIR}" go build -o "${BIN_PATH}" .
-)
+if [[ -x "${BIN_PATH}" ]]; then
+	printf 'Reusing existing binary at %s\n' "${BIN_PATH}"
+else
+	printf 'Building binary at %s (run `make build` to pre-build)\n' "${BIN_PATH}"
+	(
+		cd "${ROOT_DIR}"
+		GOCACHE="${GOCACHE_DIR}" GOMODCACHE="${GOMODCACHE_DIR}" go build -o "${BIN_PATH}" .
+	)
+fi
 
 section "Help Output"
-printf 'Command: %s --help\n\n' "${BIN_PATH}"
-"${BIN_PATH}" --help
+HELP_CMD=("${BIN_PATH}" --help)
+announce "" -- "${HELP_CMD[@]}"
+"${HELP_CMD[@]}"
 pause_between_steps
 
 section "Plain Line Mode"
-printf 'Command: printf ... | %s --total 3 --detail --width %s\n\n' "${BIN_PATH}" "${BAR_WIDTH}"
+PLAIN_CMD=("${BIN_PATH}" --total 3 --detail --width "${BAR_WIDTH}")
+announce "printf ... | " -- "${PLAIN_CMD[@]}"
 (
 	printf 'build\n'
 	sleep 0.4
 	printf 'test\n'
 	sleep 0.4
 	printf 'package\n'
-) | "${BIN_PATH}" --total 3 --detail --width "${BAR_WIDTH}"
+) | "${PLAIN_CMD[@]}"
 pause_between_steps
 
 section "Control Protocol"
-printf 'Command: control events piped into %s --detail --width %s\n\n' "${BIN_PATH}" "${BAR_WIDTH}"
+CONTROL_CMD=("${BIN_PATH}" --style gradient-granular --bg-style shade-light --fps 30 --detail --width "${BAR_WIDTH}")
+announce "printf '@...' ... | " -- "${CONTROL_CMD[@]}"
 (
 	printf '@set-total 3\n'
 	printf '@phase-name build\n'
@@ -122,11 +151,12 @@ printf 'Command: control events piped into %s --detail --width %s\n\n' "${BIN_PA
 	printf '@phase-name package\n'
 	sleep 0.4
 	printf '@tick\n'
-) | "${BIN_PATH}" --style gradient-granular --bg-style shade-light --fps 30 --detail --width "${BAR_WIDTH}"
+) | "${CONTROL_CMD[@]}"
 pause_between_steps
 
 section "Custom Background"
-printf 'Command: custom background demo with %s --bg-style custom --bg-char ░ --detail --width %s\n\n' "${BIN_PATH}" "${BAR_WIDTH}"
+CUSTOM_BG_CMD=("${BIN_PATH}" --style gradient-granular --bg-style custom --bg-char '░' --detail --width "${BAR_WIDTH}")
+announce "printf '@...' ... | " -- "${CUSTOM_BG_CMD[@]}"
 (
 	printf '@set-total 3\n'
 	printf '@phase-name build\n'
@@ -138,11 +168,12 @@ printf 'Command: custom background demo with %s --bg-style custom --bg-char ░ 
 	printf '@phase-name package\n'
 	sleep 0.5
 	printf '@tick\n'
-) | "${BIN_PATH}" --style gradient-granular --bg-style custom --bg-char '░' --detail --width "${BAR_WIDTH}"
+) | "${CUSTOM_BG_CMD[@]}"
 pause_between_steps
 
 section "Tint Animation: Pulse"
-printf 'Command: pulse tint animation demo with %s --tint-animation pulse --detail --width %s\n\n' "${BIN_PATH}" "${BAR_WIDTH}"
+PULSE_CMD=("${BIN_PATH}" --style gradient-block --tint-animation pulse --detail --width "${BAR_WIDTH}")
+announce "printf '@...' ... | " -- "${PULSE_CMD[@]}"
 (
 	printf '@set-total 3\n'
 	printf '@phase-name build\n'
@@ -156,11 +187,12 @@ printf 'Command: pulse tint animation demo with %s --tint-animation pulse --deta
 	printf '@phase-name package\n'
 	sleep 1.0
 	printf '@tick\n'
-) | "${BIN_PATH}" --style gradient-block --tint-animation pulse --detail --width "${BAR_WIDTH}"
+) | "${PULSE_CMD[@]}"
 pause_between_steps
 
 section "Tint Animation: Shimmer"
-printf 'Command: shimmer tint animation demo with %s --tint-animation shimmer --detail --width %s\n\n' "${BIN_PATH}" "${BAR_WIDTH}"
+SHIMMER_CMD=("${BIN_PATH}" --style gradient-block --tint-animation shimmer --detail --width "${BAR_WIDTH}")
+announce "printf '@...' ... | " -- "${SHIMMER_CMD[@]}"
 (
 	printf '@set-total 3\n'
 	printf '@phase-name build\n'
@@ -174,11 +206,12 @@ printf 'Command: shimmer tint animation demo with %s --tint-animation shimmer --
 	printf '@phase-name package\n'
 	sleep 1.0
 	printf '@tick\n'
-) | "${BIN_PATH}" --style gradient-block --tint-animation shimmer --detail --width "${BAR_WIDTH}"
+) | "${SHIMMER_CMD[@]}"
 pause_between_steps
 
 section "Tint Animation: Cycle"
-printf 'Command: cycle tint animation demo with %s --tint-animation cycle --detail --width %s\n\n' "${BIN_PATH}" "${BAR_WIDTH}"
+CYCLE_CMD=("${BIN_PATH}" --style gradient-block --tint-animation cycle --detail --width "${BAR_WIDTH}")
+announce "printf '@...' ... | " -- "${CYCLE_CMD[@]}"
 (
 	printf '@set-total 3\n'
 	printf '@phase-name build\n'
@@ -192,11 +225,12 @@ printf 'Command: cycle tint animation demo with %s --tint-animation cycle --deta
 	printf '@phase-name package\n'
 	sleep 1.0
 	printf '@tick\n'
-) | "${BIN_PATH}" --style gradient-block --tint-animation cycle --detail --width "${BAR_WIDTH}"
+) | "${CYCLE_CMD[@]}"
 pause_between_steps
 
 section "JSON Protocol"
-printf 'Command: JSON events piped into %s --input-mode json --detail --width %s\n\n' "${BIN_PATH}" "${BAR_WIDTH}"
+JSON_CMD=("${BIN_PATH}" --input-mode json --detail --width "${BAR_WIDTH}")
+announce "printf '{...}' ... | " -- "${JSON_CMD[@]}"
 (
 	printf '{"type":"reset","total":3,"phases":["build","test","package"]}\n'
 	sleep 0.4
@@ -207,25 +241,27 @@ printf 'Command: JSON events piped into %s --input-mode json --detail --width %s
 	printf '{"type":"phase","name":"package"}\n'
 	sleep 0.4
 	printf '{"type":"tick","amount":1}\n'
-) | "${BIN_PATH}" --input-mode json --detail --width "${BAR_WIDTH}"
+) | "${JSON_CMD[@]}"
 pause_between_steps
 
 section "Phase File Bootstrap"
-printf 'Command: numeric values piped into %s with --phase-file --detail --width %s\n\n' "${BIN_PATH}" "${BAR_WIDTH}"
+PHASE_FILE_CMD=("${BIN_PATH}" --input-mode value --phase-file "${ROOT_DIR}/testdata/phase-files/phases.txt" --detail --width "${BAR_WIDTH}")
+announce "printf '<n>' ... | " -- "${PHASE_FILE_CMD[@]}"
 (
 	printf '1\n'
 	sleep 0.4
 	printf '2\n'
 	sleep 0.4
 	printf '3\n'
-) | "${BIN_PATH}" --input-mode value --phase-file "${ROOT_DIR}/testdata/phase-files/phases.txt" --detail --width "${BAR_WIDTH}"
+) | "${PHASE_FILE_CMD[@]}"
 pause_between_steps
 
 section "Socket Mode"
-printf 'Command: %s --socket-path %s --total 3 --detail --width %s\n\n' "${BIN_PATH}" "${SOCKET_PATH}" "${BAR_WIDTH}"
+SOCKET_CMD=("${BIN_PATH}" --socket-path "${SOCKET_PATH}" --total 3 --detail --width "${BAR_WIDTH}")
+announce "" -- "${SOCKET_CMD[@]}"
 
 if command -v nc >/dev/null 2>&1; then
-	"${BIN_PATH}" --socket-path "${SOCKET_PATH}" --total 3 --detail --width "${BAR_WIDTH}" &
+	"${SOCKET_CMD[@]}" &
 	SOCKET_PID=$!
 	wait_for_socket
 
@@ -253,9 +289,10 @@ fi
 pause_between_steps
 
 section "Expected Failure"
-printf 'Command: %s --socket-path relative.sock\n\n' "${BIN_PATH}"
+FAIL_CMD=("${BIN_PATH}" --socket-path relative.sock)
+announce "" -- "${FAIL_CMD[@]}"
 set +e
-"${BIN_PATH}" --socket-path relative.sock
+"${FAIL_CMD[@]}"
 status=$?
 set -e
 printf '\nExit status: %d (expected non-zero)\n' "${status}"
