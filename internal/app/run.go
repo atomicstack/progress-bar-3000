@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -69,10 +70,35 @@ func Run(cfg config.Config, in io.Reader, out, _ io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if final, ok := finalModel.(Model); ok && final.err != nil {
+	final, ok := finalModel.(Model)
+	if ok && final.err != nil {
 		return final.err
 	}
+	if ok && cfg.ClearOnExit {
+		eraseRenderedBlock(out, final.View())
+	}
 	return nil
+}
+
+// CSI control sequences. The byte 0x1b is ESC; "[" introduces a CSI.
+const (
+	csi              = "\x1b["
+	cursorUpFmt      = csi + "%dA" // CSI n A — move cursor up n rows
+	eraseScreenBelow = csi + "J"   // CSI J  — erase from cursor to end of screen
+)
+
+// eraseRenderedBlock wipes the bar (and any detail lines) from the screen
+// after the Bubble Tea program has finished. View() ends with a trailing
+// newline, so the renderer's shutdown EraseEntireLine has already cleared
+// the bottom empty row and the cursor is parked at column 0 of that row.
+// We move up over the visible rows and erase from there to the end of the
+// screen.
+func eraseRenderedBlock(out io.Writer, finalView string) {
+	rowsAbove := strings.Count(finalView, "\n")
+	if rowsAbove <= 0 {
+		return
+	}
+	fmt.Fprintf(out, cursorUpFmt+eraseScreenBelow, rowsAbove)
 }
 
 func bootstrapState(cfg config.Config) (progress.State, error) {

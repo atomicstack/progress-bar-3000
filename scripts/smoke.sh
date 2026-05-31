@@ -137,6 +137,20 @@ announce "printf ... | " -- "${PLAIN_CMD[@]}"
 ) | "${PLAIN_CMD[@]}"
 pause_between_steps
 
+section "Minimal Bar"
+MINIMAL_CMD=("${BIN_PATH}" --format '%p %{percent}' --width "${BAR_WIDTH}")
+announce "printf '@...' ... | " -- "${MINIMAL_CMD[@]}"
+(
+	printf '@set-total 3\n'
+	sleep 0.4
+	printf '@tick\n'
+	sleep 0.4
+	printf '@tick\n'
+	sleep 0.4
+	printf '@tick\n'
+) | "${MINIMAL_CMD[@]}"
+pause_between_steps
+
 section "Control Protocol"
 CONTROL_CMD=("${BIN_PATH}" --style gradient-granular --bg-style shade-light --fps 30 --detail --width "${BAR_WIDTH}")
 announce "printf '@...' ... | " -- "${CONTROL_CMD[@]}"

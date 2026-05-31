@@ -30,7 +30,6 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 		GradientEnd:     "#0087ff",
 		FPS:             60,
 		Lerp:            0.18,
-		TintAnimation:   config.TintAnimationNone,
 	}
 
 	backgroundRune := ""
@@ -71,10 +70,13 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.Phase, "phase", cfg.Phase, "phase label")
 	cmd.Flags().StringVar(&cfg.SocketPath, "socket-path", cfg.SocketPath, "unix socket path")
 	cmd.Flags().IntVar(&cfg.Width, "width", cfg.Width, "output width")
-	cmd.Flags().BoolVar(&cfg.Detail, "detail", cfg.Detail, "show detail")
+	cmd.Flags().StringVar(&cfg.Detail, "detail", cfg.Detail, "show extra line(s) below the bar: comma-separated list of label, phase, value, or all (bare --detail = all)")
+	cmd.Flags().Lookup("detail").NoOptDefVal = config.DetailAll
+	cmd.Flags().StringArrayVar(&cfg.DetailFormats, "detail-format", cfg.DetailFormats, "additional detail row rendered from a format-string template (repeatable; same tokens as --format)")
+	cmd.Flags().BoolVar(&cfg.ClearOnExit, "clear-on-exit", cfg.ClearOnExit, "erase the bar after completion instead of leaving it on screen")
 	cmd.Flags().IntVar(&cfg.FPS, "fps", cfg.FPS, "frames per second")
 	cmd.Flags().Float64Var(&cfg.Lerp, "lerp", cfg.Lerp, "lerp factor")
-	cmd.Flags().StringVar((*string)(&cfg.TintAnimation), "tint-animation", string(cfg.TintAnimation), "tint animation")
+	cmd.Flags().StringVar((*string)(&cfg.TintAnimation), "tint-animation", string(cfg.TintAnimation), "tint animation: pulse, shimmer, or cycle (omit for none)")
 	cmd.Flags().BoolVar(&cfg.ASCII, "ascii", cfg.ASCII, "use ascii characters")
 
 	return cmd

@@ -31,13 +31,22 @@ type errMsg struct {
 }
 
 type Model struct {
-	cfg      config.Config
-	template fmtx.Template
-	state    progress.State
-	detail   bool
-	frame    int
-	elapsed  float64
-	err      error
+	cfg           config.Config
+	template      fmtx.Template
+	state         progress.State
+	detail        []config.DetailKey
+	detailFormats []fmtx.Template
+	frame         int
+	elapsed       float64
+	err           error
+}
+
+// detailRow renders one detail line below the bar from the current state.
+// Centralised so that the formatting for each row lives in exactly one place.
+var detailRenderers = map[config.DetailKey]func(progress.State) string{
+	config.DetailPhase: func(s progress.State) string { return fmt.Sprintf("phase: %s", s.CurrentPhase()) },
+	config.DetailValue: func(s progress.State) string { return fmt.Sprintf("value: %.0f/%d", s.Value, s.Total) },
+	config.DetailLabel: func(s progress.State) string { return fmt.Sprintf("label: %s", s.Label) },
 }
 
 func NewModel(cfg config.Config, initial progress.State) Model {
@@ -52,11 +61,19 @@ func NewModel(cfg config.Config, initial progress.State) Model {
 		}
 		initial.PhaseIndex = index
 	}
+	// Validate already ran, so any error here means programmer misuse.
+	detail, _ := config.ParseDetail(cfg.Detail)
+	detailFormats := make([]fmtx.Template, 0, len(cfg.DetailFormats))
+	for _, raw := range cfg.DetailFormats {
+		t, _ := fmtx.Parse(raw)
+		detailFormats = append(detailFormats, t)
+	}
 	return Model{
-		cfg:      cfg,
-		template: tpl,
-		state:    initial,
-		detail:   cfg.Detail,
+		cfg:           cfg,
+		template:      tpl,
+		state:         initial,
+		detail:        detail,
+		detailFormats: detailFormats,
 	}
 }
 
@@ -107,17 +124,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	resolver := resolver{cfg: m.cfg, state: m.state, elapsed: m.elapsed}
-	line := m.template.Render(resolver)
-	if !m.detail {
-		return line
+	rows := []string{m.template.Render(resolver)}
+	for _, k := range m.detail {
+		rows = append(rows, detailRenderers[k](m.state))
 	}
-
-	return strings.Join([]string{
-		line,
-		fmt.Sprintf("phase: %s", m.state.CurrentPhase()),
-		fmt.Sprintf("value: %.0f/%d", m.state.Value, m.state.Total),
-		fmt.Sprintf("label: %s", m.state.Label),
-	}, "\n")
+	for _, t := range m.detailFormats {
+		rows = append(rows, t.Render(resolver))
+	}
+	// Trailing newline shifts Bubble Tea's render area down by one empty row.
+	// On graceful shutdown the renderer's EraseEntireLine targets that empty
+	// row instead of the bar, so the bar (and any detail lines) stay visible.
+	// Run() handles the --clear-on-exit case by erasing those rows itself.
+	return strings.Join(rows, "\n") + "\n"
 }
 
 type resolver struct {

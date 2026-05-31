@@ -37,6 +37,65 @@ func TestModelViewCompactIncludesPhaseAndPercent(t *testing.T) {
 	}
 }
 
+func TestDetailFormatRendersTemplateBelowBar(t *testing.T) {
+	cfg := config.Config{
+		Format:          "%{bar-only}",
+		DetailFormats:   []string{"phase: %{phase} [%{label}]"},
+		Style:           config.StyleGradientGranular,
+		BackgroundStyle: config.BackgroundStyleSpace,
+		GradientStart:   "#ffffff",
+		GradientEnd:     "#0087ff",
+		FPS:             60,
+		Lerp:            0.2,
+	}
+
+	m := NewModel(cfg, progress.State{
+		Total:        4,
+		Value:        2,
+		DisplayValue: 2,
+		Phases:       []string{"build", "test", "package", "ship"},
+		Label:        "compiling widget.go",
+	})
+
+	got := stripANSI(m.View())
+	want := "phase: test [compiling widget.go]"
+	if !strings.Contains(got, want) {
+		t.Fatalf("View() = %q, want to contain %q", got, want)
+	}
+}
+
+func TestDetailFormatRendersAfterKeyedDetailRows(t *testing.T) {
+	cfg := config.Config{
+		Format:          "%{bar-only}",
+		Detail:          "phase",
+		DetailFormats:   []string{"custom: %{label}"},
+		Style:           config.StyleGradientGranular,
+		BackgroundStyle: config.BackgroundStyleSpace,
+		GradientStart:   "#ffffff",
+		GradientEnd:     "#0087ff",
+		FPS:             60,
+		Lerp:            0.2,
+	}
+
+	m := NewModel(cfg, progress.State{
+		Total:        2,
+		Value:        1,
+		DisplayValue: 1,
+		Phases:       []string{"build", "ship"},
+		Label:        "linking",
+	})
+
+	got := stripANSI(m.View())
+	phaseIdx := strings.Index(got, "phase: build")
+	customIdx := strings.Index(got, "custom: linking")
+	if phaseIdx < 0 || customIdx < 0 {
+		t.Fatalf("View() = %q, want both 'phase: build' and 'custom: linking'", got)
+	}
+	if phaseIdx >= customIdx {
+		t.Fatalf("View() = %q, want keyed detail row before --detail-format row", got)
+	}
+}
+
 func TestModelTickLerpsDisplayValueTowardTarget(t *testing.T) {
 	cfg := config.Config{Format: "%{percent}", FPS: 60, Lerp: 0.25}
 	m := NewModel(cfg, progress.State{Total: 4, Value: 4, DisplayValue: 0})

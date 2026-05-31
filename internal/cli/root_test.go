@@ -146,6 +146,58 @@ func TestNewRootCommandParsesSocketPath(t *testing.T) {
 	}
 }
 
+func TestNewRootCommandParsesRepeatedDetailFormat(t *testing.T) {
+	var got config.Config
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	cmd := NewRootCommand(func(cfg config.Config) error {
+		got = cfg
+		return nil
+	})
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{
+		"--detail-format", "phase: %{phase} [%{label}]",
+		"--detail-format", "value: %{value}/%{total}",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{
+		"phase: %{phase} [%{label}]",
+		"value: %{value}/%{total}",
+	}
+	if len(got.DetailFormats) != len(want) {
+		t.Fatalf("expected %d detail formats, got %d (%v)", len(want), len(got.DetailFormats), got.DetailFormats)
+	}
+	for i, w := range want {
+		if got.DetailFormats[i] != w {
+			t.Fatalf("detail format %d = %q, want %q", i, got.DetailFormats[i], w)
+		}
+	}
+}
+
+func TestNewRootCommandRejectsInvalidDetailFormat(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	cmd := NewRootCommand(func(config.Config) error { return nil })
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"--detail-format", "phase: %"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected an error for unterminated template token")
+	}
+	if !strings.Contains(err.Error(), "--detail-format") {
+		t.Fatalf("expected error to mention --detail-format, got %v", err)
+	}
+}
+
 func TestNewRootCommandParsesRendererFlags(t *testing.T) {
 	var got config.Config
 	var stdout bytes.Buffer
@@ -195,8 +247,8 @@ func TestNewRootCommandParsesRendererFlags(t *testing.T) {
 		t.Fatalf("expected fps 30, got %d", got.FPS)
 	}
 
-	if !got.Detail {
-		t.Fatal("expected detail mode to be enabled")
+	if got.Detail != config.DetailAll {
+		t.Fatalf("expected bare --detail to default to %q, got %q", config.DetailAll, got.Detail)
 	}
 
 	if stdout.Len() != 0 {

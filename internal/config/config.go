@@ -3,6 +3,9 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
+
+	fmtx "progress-bar-3000/internal/format"
 )
 
 type InputMode string
@@ -52,11 +55,66 @@ const (
 type TintAnimation string
 
 const (
-	TintAnimationNone    TintAnimation = "none"
 	TintAnimationPulse   TintAnimation = "pulse"
 	TintAnimationShimmer TintAnimation = "shimmer"
 	TintAnimationCycle   TintAnimation = "cycle"
 )
+
+// DetailKey identifies a single detail row that can be rendered below the bar.
+type DetailKey string
+
+const (
+	DetailLabel DetailKey = "label"
+	DetailPhase DetailKey = "phase"
+	DetailValue DetailKey = "value"
+)
+
+// DetailAll is a flag-only shorthand that expands to every DetailKey.
+const DetailAll = "all"
+
+// DetailRenderOrder is the canonical top-to-bottom order in which detail
+// rows appear when multiple keys are selected.
+var DetailRenderOrder = []DetailKey{DetailPhase, DetailValue, DetailLabel}
+
+// ParseDetail parses the raw --detail flag value (a comma-separated list of
+// DetailKey tokens, optionally including the "all" shorthand) into the set
+// of keys to render, returned in DetailRenderOrder. An empty string returns
+// nil (no detail rows). Unknown tokens produce an error.
+func ParseDetail(s string) ([]DetailKey, error) {
+	if s == "" {
+		return nil, nil
+	}
+	known := map[string]DetailKey{
+		string(DetailLabel): DetailLabel,
+		string(DetailPhase): DetailPhase,
+		string(DetailValue): DetailValue,
+	}
+	selected := map[DetailKey]bool{}
+	for raw := range strings.SplitSeq(s, ",") {
+		tok := strings.TrimSpace(raw)
+		if tok == "" {
+			continue
+		}
+		if tok == DetailAll {
+			for _, k := range DetailRenderOrder {
+				selected[k] = true
+			}
+			continue
+		}
+		key, ok := known[tok]
+		if !ok {
+			return nil, fmt.Errorf("--detail: unknown value %q (want label, phase, value, or all)", tok)
+		}
+		selected[key] = true
+	}
+	out := make([]DetailKey, 0, len(selected))
+	for _, k := range DetailRenderOrder {
+		if selected[k] {
+			out = append(out, k)
+		}
+	}
+	return out, nil
+}
 
 type Config struct {
 	Total           int
@@ -73,7 +131,9 @@ type Config struct {
 	Phase           string
 	SocketPath      string
 	Width           int
-	Detail          bool
+	Detail          string
+	DetailFormats   []string
+	ClearOnExit     bool
 	FPS             int
 	Lerp            float64
 	TintAnimation   TintAnimation
@@ -106,9 +166,19 @@ func (c Config) Validate() error {
 	}
 
 	switch c.TintAnimation {
-	case TintAnimationNone, TintAnimationPulse, TintAnimationShimmer, TintAnimationCycle:
+	case "", TintAnimationPulse, TintAnimationShimmer, TintAnimationCycle:
 	default:
-		return fmt.Errorf("--tint-animation must be one of none, pulse, shimmer, cycle")
+		return fmt.Errorf("--tint-animation must be one of pulse, shimmer, or cycle")
+	}
+
+	if _, err := ParseDetail(c.Detail); err != nil {
+		return err
+	}
+
+	for i, tpl := range c.DetailFormats {
+		if _, err := fmtx.Parse(tpl); err != nil {
+			return fmt.Errorf("--detail-format[%d] %q: %w", i, tpl, err)
+		}
 	}
 
 	switch c.FPS {

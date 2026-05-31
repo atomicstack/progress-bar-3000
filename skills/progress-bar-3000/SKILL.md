@@ -121,10 +121,12 @@ When the agent is already running inside a multiplexer (`[ -n "$TMUX" ]`), the b
 if [[ -n "${TMUX-}" ]]; then
   sock="$(mktemp -u -t pb3.XXXXXX).sock"
 
-  # size the bar to fill the window. -8 leaves room for " NN% phase"
-  # after the bar when --detail is on; raise the subtracted value if you
-  # use a custom --format with more trailing tokens.
-  bar_width=$(($(tmux display-message -p -t "$TMUX_PANE" '#{window_width}') - 8))
+  # size the bar to fill the window. -6 leaves room for " 100%" after the
+  # bar — the format below intentionally drops %{phase} because the
+  # --detail-format row already prints "phase: <name> [<label>]" on its own
+  # line. if you keep %{phase} in the inline format, reserve enough columns
+  # for the longest phase name or it gets truncated ("submit" → "sub").
+  bar_width=$(($(tmux display-message -p -t "$TMUX_PANE" '#{window_width}') - 6))
   (( bar_width < 10 )) && bar_width=10
 
   # -d  : don't steal focus — keep the agent's pane active
@@ -134,7 +136,19 @@ if [[ -n "${TMUX-}" ]]; then
   # -P -F '#{pane_id}' echoes the new pane id so we can kill it later
   # pre-quote the child command with printf '%q' since tmux reparses via sh -c;
   # printf '%q' works in bash and zsh, unlike ${var@Q} (bash 4.4+ only).
-  cmd=$(printf '%q ' ./progress-bar-3000 --socket-path "$sock" --total "$n" --detail --width "$bar_width")
+  #
+  # --detail-format is a custom detail row rendered via the same format-token
+  # grammar as --format. it composes phase + label onto one line so you can
+  # see both at a glance without burning two detail rows. emit @label events
+  # alongside @phase-name / @tick to populate the bracketed half.
+  cmd=$(printf '%q ' ./progress-bar-3000 \
+    --socket-path "$sock" \
+    --total "$n" \
+    --width "$bar_width" \
+    --style gradient-granular \
+    --tint-animation cycle \
+    --format '%p %{percent}' \
+    --detail-format 'phase: %{phase} [%{label}]')
   pane="$(tmux split-window -d -f -b -v -l 3 -P -F '#{pane_id}' "$cmd")"
 
   # wait for the renderer to bind the socket before sending events
@@ -154,7 +168,9 @@ Key points:
 
 - `-d -f -b -v -l 3` → 3-row full-width pane at the top, agent's pane keeps focus. Drop `-b` for bottom.
 - `-P -F '#{pane_id}'` prints the new pane id (e.g. `%42`) — capture it so you can target `tmux kill-pane -t` later.
-- size `--width` from `#{window_width}` (minus a small reserve for the trailing percent / phase tokens), not a fixed literal — hardcoding 40 on a 195-column window leaves most of the bar empty.
+- size `--width` from `#{window_width}` minus a small reserve for trailing format tokens, not a fixed literal — hardcoding 40 on a 195-column window leaves most of the bar empty.
+- **format / detail must not duplicate the phase.** the default `--format` is `'%p %{percent} %{phase}'` and `--detail=phase` (or the `--detail-format` recipe above) prints the phase on its own row. running both at once both duplicates the phase and truncates the inline copy whenever the phase name is longer than your width reserve (long names like `submit` clip to `sub`). pick one home for the phase: drop `%{phase}` from `--format` (the recipe above) and let the detail row own it, or drop the detail row and widen the reserve to fit the longest phase name + a space.
+- `--detail-format '<template>'` is repeatable. use it whenever the built-in `--detail=phase/value/label` rows aren't the shape you want (e.g. `phase: %{phase} [%{label}]` to fuse two signals into one row, or `%{value}/%{total} @ %{rate}` for a value+rate row). same token grammar as `--format`. each occurrence adds one row below the keyed `--detail` rows, in the order given. bump `-l 3` → `-l 4` (etc.) if you add more rows than the pane can fit.
 - wait for the socket file to appear before the first `nc -U`; the renderer takes a frame or two to bind.
 - use a unique socket path per run (`mktemp -u`) so concurrent agent runs don't collide.
 - without `$TMUX`, fall back to inline piped mode (pattern A below) rather than trying to split something that isn't there.
@@ -170,13 +186,14 @@ Key points:
 | `--style ...`                        | plain / block / granular / shaded / gradient-{block,granular,shaded}   |
 | `--bg-style ...`                     | none / space / ascii / shade-light / shade-medium / shade-dark / custom|
 | `--bg-char '▓'`                      | background rune when `--bg-style custom`                               |
-| `--tint-animation ...`               | none (default) / pulse / shimmer / cycle — all fps-independent         |
+| `--tint-animation ...`               | pulse / shimmer / cycle — all fps-independent (omit for no animation)  |
 | `--gradient-start` / `--gradient-end`| hex colours (`#ffffff` etc.)                                           |
 | `--color-mode ...`                   | auto (default) / truecolor / 256 / 16 / none                           |
 | `--fps 15 \| 30 \| 60`                | render rate                                                            |
 | `--lerp 0.18`                        | display-value smoothing factor (0 < lerp ≤ 1; higher = snappier)       |
 | `--width N`                          | bar width in columns (default 20)                                      |
-| `--detail`                           | extra lines showing phase / value / label                              |
+| `--detail[=keys]`                    | extra rows below the bar; comma list of `label`/`phase`/`value`, or `all` (bare `--detail` = `all`) |
+| `--detail-format '<template>'`       | extra detail row rendered via the same format-token grammar as `--format`; repeatable, rendered after the keyed `--detail` rows |
 | `--format '...'`                     | pv-style template (see tokens below)                                   |
 | `--socket-path /abs/path.sock`       | listen on a unix socket instead of stdin                               |
 
