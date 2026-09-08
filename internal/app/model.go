@@ -38,14 +38,17 @@ type Model struct {
 	detailFormats []fmtx.Template
 	frame         int
 	elapsed       float64
-	err           error
+	// now is the wall-clock time of the latest frame; %{timer} is
+	// rendered as now minus state.StartedAt.
+	now time.Time
+	err error
 }
 
 // detailRow renders one detail line below the bar from the current state.
 // Centralised so that the formatting for each row lives in exactly one place.
 var detailRenderers = map[config.DetailKey]func(progress.State) string{
 	config.DetailPhase: func(s progress.State) string { return fmt.Sprintf("phase: %s", s.CurrentPhase()) },
-	config.DetailValue: func(s progress.State) string { return fmt.Sprintf("value: %.0f/%d", s.Value, s.Total) },
+	config.DetailValue: func(s progress.State) string { return fmt.Sprintf("value: %.0f/%d", s.Value, s.EffectiveTotal()) },
 	config.DetailLabel: func(s progress.State) string { return fmt.Sprintf("label: %s", s.Label) },
 }
 
@@ -104,6 +107,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// animations time-based (so they don't change speed with --fps) and
 		// deterministic for tests that inject specific Now values.
 		m.elapsed = float64(msg.Now.UnixNano()) / 1e9
+		m.now = msg.Now
 		gap := m.state.Value - m.state.DisplayValue
 		if math.Abs(gap) < 0.001 {
 			m.state.DisplayValue = m.state.Value
@@ -123,7 +127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	resolver := resolver{cfg: m.cfg, state: m.state, elapsed: m.elapsed}
+	resolver := resolver{cfg: m.cfg, state: m.state, elapsed: m.elapsed, now: m.now}
 	rows := []string{m.template.Render(resolver)}
 	for _, k := range m.detail {
 		rows = append(rows, detailRenderers[k](m.state))
@@ -142,6 +146,7 @@ type resolver struct {
 	cfg     config.Config
 	state   progress.State
 	elapsed float64
+	now     time.Time
 }
 
 func (r resolver) Resolve(name string, width int) string {
@@ -159,7 +164,7 @@ func (r resolver) Resolve(name string, width int) string {
 		pulse, shimmer, shift := animationState(r.cfg, r.elapsed)
 		return render.RenderBar(render.Options{
 			Width:           barWidth,
-			Percent:         clampPercent(r.state.DisplayValue, r.state.Total),
+			Percent:         clampPercent(r.state.DisplayValue, r.state.EffectiveTotal()),
 			Style:           render.Style(r.cfg.Style),
 			BackgroundStyle: render.BackgroundStyle(r.cfg.BackgroundStyle),
 			BackgroundRune:  r.cfg.BackgroundRune,
@@ -169,6 +174,7 @@ func (r resolver) Resolve(name string, width int) string {
 			Pulse:           pulse,
 			ShimmerPhase:    shimmer,
 			GradientShift:   shift,
+			ASCII:           r.cfg.ASCII,
 		})
 	case "percent":
 		return fmt.Sprintf("%.0f%%", r.state.Percent())
@@ -183,13 +189,13 @@ func (r resolver) Resolve(name string, width int) string {
 	case "value":
 		return fmt.Sprintf("%.0f", r.state.Value)
 	case "total":
-		return fmt.Sprintf("%d", r.state.Total)
+		return fmt.Sprintf("%d", r.state.EffectiveTotal())
 	case "rate":
 		return fmt.Sprintf("%.2f/s", r.state.RatePerSecond())
 	case "eta":
 		return r.state.ETA().String()
 	case "timer":
-		return ""
+		return elapsedSince(r.state.StartedAt, r.now).String()
 	default:
 		if strings.HasPrefix(name, "meta:") {
 			return r.state.Meta[strings.TrimPrefix(name, "meta:")]
@@ -228,6 +234,20 @@ func wrapUnit(x float64) float64 {
 		v += 1
 	}
 	return v
+}
+
+// elapsedSince is the whole-second duration between start and now for the
+// %{timer} token. An unknown start (or a now that predates it, e.g. before
+// the first frame has arrived) renders as 0s rather than a negative value.
+func elapsedSince(start, now time.Time) time.Duration {
+	if start.IsZero() {
+		return 0
+	}
+	d := now.Sub(start).Truncate(time.Second)
+	if d < 0 {
+		return 0
+	}
+	return d
 }
 
 func clampPercent(value float64, total int) float64 {

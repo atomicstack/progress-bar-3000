@@ -45,4 +45,8 @@ type Options struct {
 	Pulse           float64
 	ShimmerPhase    float64
 	GradientShift   float64
+	// ASCII forces every glyph to a 7-bit character: fills become '=' with
+	// no partial cells, and non-ascii background glyphs become '.'. Colour
+	// handling is unaffected.
+	ASCII bool
 }

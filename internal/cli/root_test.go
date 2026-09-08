@@ -259,3 +259,38 @@ func TestNewRootCommandParsesRendererFlags(t *testing.T) {
 		t.Fatalf("expected no stderr output, got %q", stderr.String())
 	}
 }
+
+func TestNewRootCommandRejectsPositionalArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "detail value mistaken for positional", args: []string{"--detail", "phase"}, want: "phase"},
+		{name: "stray argument", args: []string{"extra"}, want: "extra"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ran := false
+			cmd := NewRootCommand(func(config.Config) error {
+				ran = true
+				return nil
+			})
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+			cmd.SetArgs(tc.args)
+
+			err := cmd.Execute()
+			if err == nil {
+				t.Fatalf("expected an error for args %v", tc.args)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error to mention %q, got %v", tc.want, err)
+			}
+			if ran {
+				t.Fatal("run callback should not be invoked when positional args are present")
+			}
+		})
+	}
+}

@@ -69,6 +69,21 @@ func TestNewSourceReturnsUnixSocketSource(t *testing.T) {
 	}
 }
 
+func TestBootstrapStateRecordsStartTime(t *testing.T) {
+	previous := now
+	t.Cleanup(func() { now = previous })
+	fixed := time.Unix(1234, 0)
+	now = func() time.Time { return fixed }
+
+	state, err := bootstrapState(config.Config{Total: 3})
+	if err != nil {
+		t.Fatalf("bootstrapState() error = %v", err)
+	}
+	if !state.StartedAt.Equal(fixed) {
+		t.Fatalf("StartedAt = %v, want %v", state.StartedAt, fixed)
+	}
+}
+
 var _ input.Source = (*stubSource)(nil)
 
 type stubSource struct{}

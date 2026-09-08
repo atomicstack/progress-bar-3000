@@ -37,6 +37,7 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "progress-bar-3000",
 		Short:         "Render a terminal progress bar from flags or streamed input.",
+		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

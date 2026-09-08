@@ -187,3 +187,73 @@ func TestModelApplyEventUpdatesState(t *testing.T) {
 		t.Fatalf("Value = %v, want 1", updated.state.Value)
 	}
 }
+
+func TestModelASCIIFlagForcesASCIIGlyphs(t *testing.T) {
+	cfg := config.Config{
+		Format:          "%{bar-only}",
+		Style:           config.StyleGradientGranular,
+		BackgroundStyle: config.BackgroundStyleShadeLight,
+		ColorMode:       config.ColorModeNone,
+		Width:           4,
+		ASCII:           true,
+		FPS:             60,
+		Lerp:            0.2,
+	}
+
+	m := NewModel(cfg, progress.State{Total: 8, Value: 3, DisplayValue: 3})
+
+	got := stripANSI(m.View())
+	want := "=...\n"
+	if got != want {
+		t.Fatalf("View() = %q, want %q", got, want)
+	}
+}
+
+func TestModelTimerRendersElapsedWholeSeconds(t *testing.T) {
+	cfg := config.Config{Format: "%{timer}|%t", FPS: 60, Lerp: 0.2}
+	m := NewModel(cfg, progress.State{Total: 4, StartedAt: time.Unix(100, 0)})
+
+	next, _ := m.Update(frameMsg{Now: time.Unix(165, 700_000_000)})
+	got := stripANSI(next.(Model).View())
+	want := "1m5s|1m5s\n"
+	if got != want {
+		t.Fatalf("View() = %q, want %q", got, want)
+	}
+}
+
+func TestModelTimerRendersZeroWhenStartUnknown(t *testing.T) {
+	cfg := config.Config{Format: "%{timer}", FPS: 60, Lerp: 0.2}
+	m := NewModel(cfg, progress.State{Total: 4})
+
+	next, _ := m.Update(frameMsg{Now: time.Unix(165, 0)})
+	got := stripANSI(next.(Model).View())
+	if got != "0s\n" {
+		t.Fatalf("View() = %q, want %q", got, "0s\n")
+	}
+}
+
+func TestModelBarAndTotalFallBackToPhaseCount(t *testing.T) {
+	cfg := config.Config{
+		Format:          "%{bar-only}|%{total}",
+		Detail:          "value",
+		Style:           config.StylePlain,
+		BackgroundStyle: config.BackgroundStyleASCII,
+		ColorMode:       config.ColorModeNone,
+		Width:           4,
+		FPS:             60,
+		Lerp:            0.2,
+	}
+
+	m := NewModel(cfg, progress.State{
+		Total:        0,
+		Value:        2,
+		DisplayValue: 2,
+		Phases:       []string{"build", "test", "package", "ship"},
+	})
+
+	got := stripANSI(m.View())
+	want := "==..|4\nvalue: 2/4\n"
+	if got != want {
+		t.Fatalf("View() = %q, want %q", got, want)
+	}
+}

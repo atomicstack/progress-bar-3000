@@ -196,3 +196,65 @@ func TestStateETAUsesFallbackTotalFromPhases(t *testing.T) {
 		t.Fatalf("ETA() = %v, want 1s", got)
 	}
 }
+
+func TestStateApplyTickAndIncrementSetLabelWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	state := State{Total: 4, Label: "initial"}
+
+	state.Apply(input.Event{Kind: input.KindTick, Amount: 1, Label: "compiling"}, time.Unix(100, 0))
+	if state.Label != "compiling" {
+		t.Fatalf("Label = %q after tick, want %q", state.Label, "compiling")
+	}
+
+	state.Apply(input.Event{Kind: input.KindTick, Amount: 1}, time.Unix(101, 0))
+	if state.Label != "compiling" {
+		t.Fatalf("Label = %q after unlabelled tick, want existing label kept", state.Label)
+	}
+
+	state.Apply(input.Event{Kind: input.KindIncrement, Amount: 1, Label: "linking"}, time.Unix(102, 0))
+	if state.Label != "linking" {
+		t.Fatalf("Label = %q after increment, want %q", state.Label, "linking")
+	}
+
+	state.Apply(input.Event{Kind: input.KindIncrement, Amount: 1}, time.Unix(103, 0))
+	if state.Label != "linking" {
+		t.Fatalf("Label = %q after unlabelled increment, want existing label kept", state.Label)
+	}
+}
+
+func TestStateEffectiveTotalFallsBackToPhaseCount(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		state State
+		want  int
+	}{
+		{name: "explicit total wins", state: State{Total: 7, Phases: []string{"a", "b"}}, want: 7},
+		{name: "phase count fallback", state: State{Phases: []string{"a", "b", "c"}}, want: 3},
+		{name: "nothing known", state: State{}, want: 0},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.state.EffectiveTotal(); got != tc.want {
+				t.Fatalf("EffectiveTotal() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestStateResetRestartsTimer(t *testing.T) {
+	t.Parallel()
+
+	state := State{Total: 3, StartedAt: time.Unix(100, 0)}
+
+	state.Apply(input.Event{Kind: input.KindReset}, time.Unix(250, 0))
+
+	if !state.StartedAt.Equal(time.Unix(250, 0)) {
+		t.Fatalf("StartedAt = %v after reset, want %v", state.StartedAt, time.Unix(250, 0))
+	}
+}

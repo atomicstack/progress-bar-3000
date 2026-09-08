@@ -140,7 +140,10 @@ func parseJSONEvent(line string) (Event, error) {
 	case "set_total":
 		return Event{Kind: KindSetTotal, Total: payload.Total}, nil
 	case string(KindPhase):
-		return Event{Kind: KindPhase, PhaseIndex: payload.Index, PhaseName: payload.Name, Phases: payload.Phases}, nil
+		if len(payload.Phases) > 0 {
+			return Event{}, fmt.Errorf(`json phase event does not accept "phases"; use a reset event`)
+		}
+		return Event{Kind: KindPhase, PhaseIndex: payload.Index, PhaseName: payload.Name}, nil
 	case string(KindLabel):
 		return Event{Kind: KindLabel, Label: payload.Label}, nil
 	case string(KindMeta):

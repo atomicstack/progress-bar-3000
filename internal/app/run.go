@@ -106,6 +106,7 @@ func bootstrapState(cfg config.Config) (progress.State, error) {
 		Total:        cfg.Total,
 		Value:        float64(cfg.Current),
 		DisplayValue: float64(cfg.Current),
+		StartedAt:    now(),
 	}
 
 	if cfg.PhaseFile != "" {

@@ -33,6 +33,9 @@ func RenderBar(opts Options) string {
 	}
 
 	fillRune, partialRunes := fillGlyphs(opts.Style)
+	if opts.ASCII {
+		fillRune, partialRunes = '=', nil
+	}
 	bgRune := backgroundRune(opts)
 
 	var out strings.Builder
@@ -40,7 +43,7 @@ func RenderBar(opts Options) string {
 		out.WriteString(colorizeFilled(opts, i, string(fillRune)))
 	}
 
-	if whole < opts.Width && partialIndex > 0 && usesPartial(opts.Style) {
+	if whole < opts.Width && partialIndex > 0 && len(partialRunes) > 0 {
 		out.WriteString(colorizeFilled(opts, whole, string(partialRunes[partialIndex-1])))
 		whole++
 	}
@@ -65,33 +68,28 @@ func fillGlyphs(style Style) (rune, []rune) {
 	}
 }
 
-func usesPartial(style Style) bool {
-	switch style {
-	case StyleGranular, StyleGradientGranular, StyleShaded, StyleGradientShaded:
-		return true
-	default:
-		return false
-	}
-}
-
 func backgroundRune(opts Options) rune {
+	r := ' '
 	switch opts.BackgroundStyle {
 	case BackgroundNone, BackgroundSpace:
-		return ' '
+		r = ' '
 	case BackgroundASCII:
-		return '.'
+		r = '.'
 	case BackgroundShadeLight:
-		return '░'
+		r = '░'
 	case BackgroundShadeMedium:
-		return '▒'
+		r = '▒'
 	case BackgroundShadeDark:
-		return '▓'
+		r = '▓'
 	case BackgroundCustom:
 		if opts.BackgroundRune != 0 {
-			return opts.BackgroundRune
+			r = opts.BackgroundRune
 		}
 	}
-	return ' '
+	if opts.ASCII && r >= 0x80 {
+		return '.'
+	}
+	return r
 }
 
 func colorizeFilled(opts Options, index int, cell string) string {

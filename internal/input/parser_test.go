@@ -155,6 +155,12 @@ func TestParseLineFailures(t *testing.T) {
 			line: "@nope 1",
 			want: "unknown control command",
 		},
+		{
+			name: "json phase event with phases array",
+			mode: config.InputModeLines,
+			line: `{"type":"phase","name":"test","phases":["build","test"]}`,
+			want: `json phase event does not accept "phases"; use a reset event`,
+		},
 	}
 
 	for _, tc := range tests {

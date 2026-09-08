@@ -17,6 +17,9 @@ type State struct {
 	PhaseIndex   int
 	Label        string
 	Meta         map[string]string
+	// StartedAt anchors the %{timer} token: the moment the state was
+	// bootstrapped or last reset. A zero value renders as "0s".
+	StartedAt time.Time
 
 	updatedAt time.Time
 	samples   []sample
@@ -35,6 +38,11 @@ func (s *State) Apply(evt input.Event, now time.Time) {
 			delta = 1
 		}
 		s.setValue(s.Value+delta, now)
+		// A plain input line ticks and carries its text as the label; an
+		// unlabelled tick must not wipe the label a previous one set.
+		if evt.Label != "" {
+			s.Label = evt.Label
+		}
 	case input.KindValue:
 		s.setValue(evt.Value, now)
 	case input.KindSetTotal:
@@ -52,11 +60,20 @@ func (s *State) Apply(evt input.Event, now time.Time) {
 	s.updatedAt = now
 }
 
-func (s *State) Percent() float64 {
-	total := s.Total
-	if total == 0 && len(s.Phases) > 0 {
-		total = len(s.Phases)
+// EffectiveTotal is the denominator every progress calculation shares: the
+// explicit Total when one is set, otherwise the phase count, otherwise 0.
+func (s *State) EffectiveTotal() int {
+	if s.Total > 0 {
+		return s.Total
 	}
+	if len(s.Phases) > 0 {
+		return len(s.Phases)
+	}
+	return 0
+}
+
+func (s *State) Percent() float64 {
+	total := s.EffectiveTotal()
 	if total <= 0 {
 		return 0
 	}
@@ -101,7 +118,7 @@ func (s *State) ETA() time.Duration {
 		return 0
 	}
 
-	remaining := s.totalForMath() - s.Value
+	remaining := float64(s.EffectiveTotal()) - s.Value
 	if remaining <= 0 {
 		return 0
 	}
@@ -156,6 +173,7 @@ func (s *State) reset(evt input.Event, now time.Time) {
 	s.Meta = nil
 	s.samples = nil
 	s.PhaseIndex = 0
+	s.StartedAt = now
 
 	if evt.Total > 0 {
 		s.Total = evt.Total
@@ -176,16 +194,6 @@ func (s *State) recordSample(value float64, now time.Time) {
 	if len(s.samples) > rateSampleLimit {
 		s.samples = append([]sample(nil), s.samples[len(s.samples)-rateSampleLimit:]...)
 	}
-}
-
-func (s *State) totalForMath() float64 {
-	if s.Total > 0 {
-		return float64(s.Total)
-	}
-	if len(s.Phases) > 0 {
-		return float64(len(s.Phases))
-	}
-	return 0
 }
 
 func phaseIndexForValue(value float64, phaseCount int) int {
