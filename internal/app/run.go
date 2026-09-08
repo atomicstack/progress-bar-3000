@@ -74,31 +74,59 @@ func Run(cfg config.Config, in io.Reader, out, _ io.Writer) error {
 	if ok && final.err != nil {
 		return final.err
 	}
-	if ok && cfg.ClearOnExit {
-		eraseRenderedBlock(out, final.View())
+	if ok {
+		finalizeRenderedBlock(out, final.View(), cfg.ClearOnExit)
 	}
 	return nil
 }
 
 // CSI control sequences. The byte 0x1b is ESC; "[" introduces a CSI.
 const (
-	csi              = "\x1b["
-	cursorUpFmt      = csi + "%dA" // CSI n A — move cursor up n rows
-	eraseScreenBelow = csi + "J"   // CSI J  — erase from cursor to end of screen
+	csi          = "\x1b["
+	cursorUpFmt  = csi + "%dA" // CSI n A — move cursor up n rows
+	eraseLineEnd = csi + "K"   // CSI K   — erase from cursor to end of line
+	eraseLine    = csi + "2K"  // CSI 2 K — erase the entire line
 )
 
-// eraseRenderedBlock wipes the bar (and any detail lines) from the screen
-// after the Bubble Tea program has finished. View() ends with a trailing
-// newline, so the renderer's shutdown EraseEntireLine has already cleared
-// the bottom empty row and the cursor is parked at column 0 of that row.
-// We move up over the visible rows and erase from there to the end of the
-// screen.
-func eraseRenderedBlock(out io.Writer, finalView string) {
-	rowsAbove := strings.Count(finalView, "\n")
-	if rowsAbove <= 0 {
+// finalizeRenderedBlock settles the bar (and any detail rows) on screen once
+// the Bubble Tea program has finished. The renderer's shutdown
+// EraseEntireLine has already wiped the last rendered row and parked the
+// cursor at column 0 of it; the rows above are still visible.
+//
+// Non-clear: move the cursor up over the surviving rows, then rewrite every
+// row with an erase-to-end-of-line and a newline, so the block is restored
+// and the shell prompt lands on a fresh line below it.
+//
+// Clear: erase the current row, then step up through the surviving rows
+// erasing each one, so the cursor ends on the block's top row.
+//
+// Rows are erased individually rather than with a single erase-to-end-of-
+// screen because tmux treats CSI J issued from the home position as a full
+// clear and scrolls the old rows into the pane's history; in a dedicated
+// pane the block starts at the home position, so that would leave a stale
+// copy of the bar in scrollback. A one-row or empty view has no rows above,
+// so no cursor-up is emitted.
+func finalizeRenderedBlock(out io.Writer, finalView string, clear bool) {
+	rows := strings.Split(finalView, "\n")
+	var b strings.Builder
+	if clear {
+		b.WriteString(eraseLine)
+		for i := 1; i < len(rows); i++ {
+			fmt.Fprintf(&b, cursorUpFmt, 1)
+			b.WriteString(eraseLine)
+		}
+		_, _ = io.WriteString(out, b.String())
 		return
 	}
-	fmt.Fprintf(out, cursorUpFmt+eraseScreenBelow, rowsAbove)
+	if len(rows) > 1 {
+		fmt.Fprintf(&b, cursorUpFmt, len(rows)-1)
+	}
+	for _, row := range rows {
+		b.WriteString(row)
+		b.WriteString(eraseLineEnd)
+		b.WriteByte('\n')
+	}
+	_, _ = io.WriteString(out, b.String())
 }
 
 func bootstrapState(cfg config.Config) (progress.State, error) {

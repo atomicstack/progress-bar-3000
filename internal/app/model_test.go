@@ -205,7 +205,7 @@ func TestModelASCIIFlagForcesASCIIGlyphs(t *testing.T) {
 	m := NewModel(cfg, progress.State{Total: 8, Value: 3, DisplayValue: 3})
 
 	got := stripANSI(m.View())
-	want := "=...\n"
+	want := "=..."
 	if got != want {
 		t.Fatalf("View() = %q, want %q", got, want)
 	}
@@ -217,7 +217,7 @@ func TestModelTimerRendersElapsedWholeSeconds(t *testing.T) {
 
 	next, _ := m.Update(frameMsg{Now: time.Unix(165, 700_000_000)})
 	got := stripANSI(next.(Model).View())
-	want := "1m5s|1m5s\n"
+	want := "1m5s|1m5s"
 	if got != want {
 		t.Fatalf("View() = %q, want %q", got, want)
 	}
@@ -229,8 +229,8 @@ func TestModelTimerRendersZeroWhenStartUnknown(t *testing.T) {
 
 	next, _ := m.Update(frameMsg{Now: time.Unix(165, 0)})
 	got := stripANSI(next.(Model).View())
-	if got != "0s\n" {
-		t.Fatalf("View() = %q, want %q", got, "0s\n")
+	if got != "0s" {
+		t.Fatalf("View() = %q, want %q", got, "0s")
 	}
 }
 
@@ -254,9 +254,44 @@ func TestModelBarAndTotalFallBackToPhaseCount(t *testing.T) {
 	})
 
 	got := stripANSI(m.View())
-	want := "==..|4\nvalue: 2/4\n"
+	want := "==..|4\nvalue: 2/4"
 	if got != want {
 		t.Fatalf("View() = %q, want %q", got, want)
+	}
+}
+
+func TestModelViewRowsAreNotPaddedWithTrailingNewline(t *testing.T) {
+	cfg := config.Config{
+		Format:          "%{bar-only} %{percent}",
+		Detail:          "phase",
+		Style:           config.StylePlain,
+		BackgroundStyle: config.BackgroundStyleASCII,
+		ColorMode:       config.ColorModeNone,
+		Width:           4,
+		FPS:             60,
+		Lerp:            0.2,
+	}
+
+	m := NewModel(cfg, progress.State{
+		Total:        4,
+		Value:        2,
+		DisplayValue: 2,
+		Phases:       []string{"build", "test", "package", "ship"},
+	})
+
+	got := stripANSI(m.View())
+	if strings.HasSuffix(got, "\n") {
+		t.Fatalf("View() = %q, must not end with a newline: a padding row pushes the bar off a 2-row pane", got)
+	}
+	rows := strings.Split(got, "\n")
+	if len(rows) != 2 {
+		t.Fatalf("View() = %q, want exactly 2 rows (bar + detail), got %d", got, len(rows))
+	}
+	if rows[0] != "==.. 50%" {
+		t.Fatalf("row 0 = %q, want %q", rows[0], "==.. 50%")
+	}
+	if rows[1] != "phase: test" {
+		t.Fatalf("row 1 = %q, want %q", rows[1], "phase: test")
 	}
 }
 

@@ -199,11 +199,12 @@ func (m Model) View() string {
 	for _, t := range m.detailFormats {
 		rows = append(rows, t.Render(resolver))
 	}
-	// Trailing newline shifts Bubble Tea's render area down by one empty row.
-	// On graceful shutdown the renderer's EraseEntireLine targets that empty
-	// row instead of the bar, so the bar (and any detail lines) stay visible.
-	// Run() handles the --clear-on-exit case by erasing those rows itself.
-	return strings.Join(rows, "\n") + "\n"
+	// No trailing newline: a live frame must occupy exactly the rows it
+	// prints. Bubble Tea drops lines from the TOP when a frame is taller than
+	// the terminal, so a padding row would push the bar off a 2-row pane.
+	// Run() restores (or erases) the block after the renderer's shutdown
+	// EraseEntireLine has wiped the last row; see finalizeRenderedBlock.
+	return strings.Join(rows, "\n")
 }
 
 type resolver struct {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -90,3 +91,65 @@ type stubSource struct{}
 
 func (stubSource) Run(context.Context, func(string) error) error { return nil }
 func (stubSource) Close() error                                  { return nil }
+
+func TestFinalizeRenderedBlockRestoresMultiRowView(t *testing.T) {
+	var out bytes.Buffer
+	view := "==.. 50%\nphase: test"
+
+	finalizeRenderedBlock(&out, view, false)
+
+	// cursor up over the surviving row, then every row rewritten with an
+	// erase-to-end-of-line; no erase-to-end-of-screen, which tmux treats as
+	// a full clear from the home position and scrolls into history.
+	want := "\x1b[1A" + "==.. 50%\x1b[K\n" + "phase: test\x1b[K\n"
+	if got := out.String(); got != want {
+		t.Fatalf("finalizeRenderedBlock() wrote %q, want %q", got, want)
+	}
+}
+
+func TestFinalizeRenderedBlockClearsMultiRowView(t *testing.T) {
+	var out bytes.Buffer
+
+	finalizeRenderedBlock(&out, "==.. 50%\nphase: test", true)
+
+	// erase the last row in place, then step up and erase each surviving
+	// row, ending on the block's top row.
+	want := "\x1b[2K" + "\x1b[1A\x1b[2K"
+	if got := out.String(); got != want {
+		t.Fatalf("finalizeRenderedBlock() wrote %q, want %q", got, want)
+	}
+}
+
+func TestFinalizeRenderedBlockSingleRowSkipsCursorUp(t *testing.T) {
+	var out bytes.Buffer
+	view := "==.. 50%"
+
+	finalizeRenderedBlock(&out, view, false)
+
+	want := view + "\x1b[K\n"
+	if got := out.String(); got != want {
+		t.Fatalf("finalizeRenderedBlock() wrote %q, want %q", got, want)
+	}
+}
+
+func TestFinalizeRenderedBlockSingleRowClear(t *testing.T) {
+	var out bytes.Buffer
+
+	finalizeRenderedBlock(&out, "==.. 50%", true)
+
+	want := "\x1b[2K"
+	if got := out.String(); got != want {
+		t.Fatalf("finalizeRenderedBlock() wrote %q, want %q", got, want)
+	}
+}
+
+func TestFinalizeRenderedBlockEmptyViewSkipsCursorUp(t *testing.T) {
+	var out bytes.Buffer
+
+	finalizeRenderedBlock(&out, "", false)
+
+	want := "\x1b[K\n"
+	if got := out.String(); got != want {
+		t.Fatalf("finalizeRenderedBlock() wrote %q, want %q", got, want)
+	}
+}
