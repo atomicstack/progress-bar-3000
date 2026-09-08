@@ -41,8 +41,34 @@ type Model struct {
 	// now is the wall-clock time of the latest frame; %{timer} is
 	// rendered as now minus state.StartedAt.
 	now time.Time
-	err error
+	// termWidth is the column count from the latest tea.WindowSizeMsg; zero
+	// until one arrives, in which case %{phases} falls back to 80.
+	termWidth int
+	// hasPhases reports whether any template uses %{phases}; phasesWidth is
+	// that token's width prefix (0 = use the terminal width). phasesOffset
+	// lerps toward phasesTarget each frame so the strip slides rather than
+	// jumps when the current phase moves out of view.
+	hasPhases    bool
+	phasesWidth  int
+	phasesOffset float64
+	phasesTarget int
+	err          error
 }
+
+const (
+	phasesToken = "phases"
+	// phasesFadeDuration is how long the crossfade between the previous
+	// and current phase lasts after a transition.
+	phasesFadeDuration = 300 * time.Millisecond
+	// phasesPulsePeriod and phasesPulseAmplitude shape the saturation
+	// oscillation of the highlight colour.
+	phasesPulsePeriod    = 2.0
+	phasesPulseAmplitude = 0.15
+	phasesDefaultWidth   = 80
+	// phasesSnapDistance is how close (in columns) the lerped offset must
+	// get to its target before it snaps onto it.
+	phasesSnapDistance = 0.5
+)
 
 // detailRow renders one detail line below the bar from the current state.
 // Centralised so that the formatting for each row lives in exactly one place.
@@ -71,13 +97,23 @@ func NewModel(cfg config.Config, initial progress.State) Model {
 		t, _ := fmtx.Parse(raw)
 		detailFormats = append(detailFormats, t)
 	}
-	return Model{
+	m := Model{
 		cfg:           cfg,
 		template:      tpl,
 		state:         initial,
 		detail:        detail,
 		detailFormats: detailFormats,
 	}
+	// The first %{phases} token decides the scroll budget; any later
+	// occurrences share the same offset.
+	for _, t := range append([]fmtx.Template{tpl}, detailFormats...) {
+		if width, ok := t.TokenWidth(phasesToken); ok {
+			m.hasPhases = true
+			m.phasesWidth = width
+			break
+		}
+	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
@@ -93,6 +129,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		return m, nil
+	case tea.WindowSizeMsg:
+		m.termWidth = msg.Width
 		return m, nil
 	case eventMsg:
 		previousDisplay := m.state.DisplayValue
@@ -114,6 +153,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.state.DisplayValue += gap * m.cfg.Lerp
 		}
+		m.advancePhasesOffset()
 		return m, nextFrameCmd(m.cfg.FPS)
 	case errMsg:
 		m.err = msg.Err
@@ -126,8 +166,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+// advancePhasesOffset recomputes the strip's target offset for the current
+// state and lerps the displayed offset toward it, snapping once close.
+func (m *Model) advancePhasesOffset() {
+	if !m.hasPhases {
+		return
+	}
+	width := phasesBudget(m.phasesWidth, m.termWidth)
+	_, target := render.RenderPhases(phasesOptions(m.cfg, m.state, m.elapsed, m.now, int(math.Round(m.phasesOffset)), width))
+	m.phasesTarget = target
+	gap := float64(target) - m.phasesOffset
+	if math.Abs(gap) < phasesSnapDistance {
+		m.phasesOffset = float64(target)
+	} else {
+		m.phasesOffset += gap * m.cfg.Lerp
+	}
+}
+
 func (m Model) View() string {
-	resolver := resolver{cfg: m.cfg, state: m.state, elapsed: m.elapsed, now: m.now}
+	resolver := resolver{
+		cfg:          m.cfg,
+		state:        m.state,
+		elapsed:      m.elapsed,
+		now:          m.now,
+		termWidth:    m.termWidth,
+		phasesOffset: int(math.Round(m.phasesOffset)),
+	}
 	rows := []string{m.template.Render(resolver)}
 	for _, k := range m.detail {
 		rows = append(rows, detailRenderers[k](m.state))
@@ -143,10 +207,12 @@ func (m Model) View() string {
 }
 
 type resolver struct {
-	cfg     config.Config
-	state   progress.State
-	elapsed float64
-	now     time.Time
+	cfg          config.Config
+	state        progress.State
+	elapsed      float64
+	now          time.Time
+	termWidth    int
+	phasesOffset int
 }
 
 func (r resolver) Resolve(name string, width int) string {
@@ -184,6 +250,9 @@ func (r resolver) Resolve(name string, width int) string {
 		return fmt.Sprintf("%d", r.state.PhaseIndex+1)
 	case "phase-count":
 		return fmt.Sprintf("%d", len(r.state.Phases))
+	case phasesToken:
+		text, _ := render.RenderPhases(phasesOptions(r.cfg, r.state, r.elapsed, r.now, r.phasesOffset, phasesBudget(width, r.termWidth)))
+		return text
 	case "label":
 		return r.state.Label
 	case "value":
@@ -202,6 +271,58 @@ func (r resolver) Resolve(name string, width int) string {
 		}
 		return ""
 	}
+}
+
+// phasesBudget resolves the strip's column budget: an explicit width prefix
+// wins, then the terminal width, then a conservative default.
+func phasesBudget(prefixWidth, termWidth int) int {
+	if prefixWidth > 0 {
+		return prefixWidth
+	}
+	if termWidth > 0 {
+		return termWidth
+	}
+	return phasesDefaultWidth
+}
+
+func phasesOptions(cfg config.Config, state progress.State, elapsed float64, now time.Time, offset, width int) render.PhasesOptions {
+	return render.PhasesOptions{
+		Phases:        state.Phases,
+		CurrentIndex:  state.PhaseIndex,
+		PreviousIndex: state.PreviousPhaseIndex,
+		Fade:          phasesFade(state, now),
+		Width:         width,
+		Offset:        offset,
+		Profile:       render.DetectProfile(string(cfg.ColorMode), render.ProfileTrueColor),
+		Highlight:     pulsedHighlight(cfg, elapsed),
+		ASCII:         cfg.ASCII,
+	}
+}
+
+// phasesFade is the crossfade progress since the last phase transition:
+// 0 at the moment of change, 1 once phasesFadeDuration has elapsed. With no
+// transition on record (or no frame yet) the strip is treated as settled.
+func phasesFade(state progress.State, now time.Time) float64 {
+	if state.PhaseChangedAt.IsZero() || now.IsZero() {
+		return 1
+	}
+	f := now.Sub(state.PhaseChangedAt).Seconds() / phasesFadeDuration.Seconds()
+	if f < 0 {
+		return 0
+	}
+	if f > 1 {
+		return 1
+	}
+	return f
+}
+
+// pulsedHighlight derives the current-phase colour from --gradient-end with
+// its saturation oscillating on a slow wall-clock cycle.
+func pulsedHighlight(cfg config.Config, elapsed float64) render.RGB {
+	_, end := animatedGradient(cfg)
+	h, s, l := render.RGBToHSL(end)
+	s += phasesPulseAmplitude * math.Sin(2*math.Pi*elapsed/phasesPulsePeriod)
+	return render.HSLToRGB(h, s, l)
 }
 
 func animatedGradient(cfg config.Config) (render.RGB, render.RGB) {

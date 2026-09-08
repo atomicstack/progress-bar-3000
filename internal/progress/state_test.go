@@ -258,3 +258,90 @@ func TestStateResetRestartsTimer(t *testing.T) {
 		t.Fatalf("StartedAt = %v after reset, want %v", state.StartedAt, time.Unix(250, 0))
 	}
 }
+
+func TestStatePhaseTransitionsRecordPreviousIndexAndTime(t *testing.T) {
+	t.Parallel()
+
+	phases := []string{"build", "test", "package", "ship"}
+	tests := []struct {
+		name         string
+		start        State
+		event        input.Event
+		wantIndex    int
+		wantPrevious int
+	}{
+		{
+			name:         "by name",
+			start:        State{Phases: phases, PhaseIndex: 1},
+			event:        input.Event{Kind: input.KindPhase, PhaseName: "ship"},
+			wantIndex:    3,
+			wantPrevious: 1,
+		},
+		{
+			name:         "by index",
+			start:        State{Phases: phases, PhaseIndex: 2},
+			event:        input.Event{Kind: input.KindPhase, PhaseIndex: 0},
+			wantIndex:    0,
+			wantPrevious: 2,
+		},
+		{
+			name:         "value driven",
+			start:        State{Phases: phases, Value: 1, PhaseIndex: 0},
+			event:        input.Event{Kind: input.KindValue, Value: 3},
+			wantIndex:    2,
+			wantPrevious: 0,
+		},
+		{
+			name:         "tick driven",
+			start:        State{Phases: phases, Value: 1, PhaseIndex: 0},
+			event:        input.Event{Kind: input.KindTick},
+			wantIndex:    1,
+			wantPrevious: 0,
+		},
+		{
+			name:         "reset",
+			start:        State{Phases: phases, Value: 4, PhaseIndex: 3},
+			event:        input.Event{Kind: input.KindReset},
+			wantIndex:    0,
+			wantPrevious: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			state := tt.start
+			now := time.Unix(500, 0)
+			state.Apply(tt.event, now)
+
+			if state.PhaseIndex != tt.wantIndex {
+				t.Fatalf("PhaseIndex = %d, want %d", state.PhaseIndex, tt.wantIndex)
+			}
+			if state.PreviousPhaseIndex != tt.wantPrevious {
+				t.Fatalf("PreviousPhaseIndex = %d, want %d", state.PreviousPhaseIndex, tt.wantPrevious)
+			}
+			if !state.PhaseChangedAt.Equal(now) {
+				t.Fatalf("PhaseChangedAt = %v, want %v", state.PhaseChangedAt, now)
+			}
+		})
+	}
+}
+
+func TestStateUnchangedPhaseKeepsChangeTime(t *testing.T) {
+	t.Parallel()
+
+	state := State{Phases: []string{"build", "test"}, Value: 1, PhaseIndex: 0}
+	state.Apply(input.Event{Kind: input.KindPhase, PhaseName: "test"}, time.Unix(100, 0))
+	// A value within the same phase must not restart the crossfade.
+	state.Apply(input.Event{Kind: input.KindValue, Value: 2.5}, time.Unix(200, 0))
+
+	if state.PhaseIndex != 1 {
+		t.Fatalf("PhaseIndex = %d, want 1", state.PhaseIndex)
+	}
+	if !state.PhaseChangedAt.Equal(time.Unix(100, 0)) {
+		t.Fatalf("PhaseChangedAt = %v, want the original transition time", state.PhaseChangedAt)
+	}
+	if state.PreviousPhaseIndex != 0 {
+		t.Fatalf("PreviousPhaseIndex = %d, want 0", state.PreviousPhaseIndex)
+	}
+}

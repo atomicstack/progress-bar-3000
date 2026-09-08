@@ -100,6 +100,17 @@ func Parse(in string) (Template, error) {
 	return Template{segments: segments}, nil
 }
 
+// TokenWidth reports the width prefix of the first occurrence of the named
+// token (0 when it has none) and whether the token appears at all.
+func (t Template) TokenWidth(name string) (int, bool) {
+	for _, seg := range t.segments {
+		if seg.kind == segmentToken && seg.name == name {
+			return seg.width, true
+		}
+	}
+	return 0, false
+}
+
 func (t Template) Render(r Resolver) string {
 	var out strings.Builder
 	for _, seg := range t.segments {

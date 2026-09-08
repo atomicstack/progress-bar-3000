@@ -15,8 +15,12 @@ type State struct {
 	DisplayValue float64
 	Phases       []string
 	PhaseIndex   int
-	Label        string
-	Meta         map[string]string
+	// PreviousPhaseIndex and PhaseChangedAt describe the most recent phase
+	// transition so renderers can crossfade between the two phases.
+	PreviousPhaseIndex int
+	PhaseChangedAt     time.Time
+	Label              string
+	Meta               map[string]string
 	// StartedAt anchors the %{timer} token: the moment the state was
 	// bootstrapped or last reset. A zero value renders as "0s".
 	StartedAt time.Time
@@ -48,7 +52,7 @@ func (s *State) Apply(evt input.Event, now time.Time) {
 	case input.KindSetTotal:
 		s.Total = evt.Total
 	case input.KindPhase:
-		s.applyPhase(evt)
+		s.applyPhase(evt, now)
 	case input.KindLabel:
 		s.Label = evt.Label
 	case input.KindMeta:
@@ -129,13 +133,13 @@ func (s *State) ETA() time.Duration {
 func (s *State) setValue(value float64, now time.Time) {
 	s.Value = value
 	s.DisplayValue = value
-	s.PhaseIndex = phaseIndexForValue(value, len(s.Phases))
+	s.setPhaseIndex(phaseIndexForValue(value, len(s.Phases)), now)
 	s.recordSample(value, now)
 }
 
-func (s *State) applyPhase(evt input.Event) {
+func (s *State) applyPhase(evt input.Event, now time.Time) {
 	if len(s.Phases) == 0 {
-		s.PhaseIndex = 0
+		s.setPhaseIndex(0, now)
 		return
 	}
 
@@ -143,15 +147,28 @@ func (s *State) applyPhase(evt input.Event) {
 	if evt.PhaseName != "" {
 		for i, phase := range s.Phases {
 			if phase == evt.PhaseName {
-				s.PhaseIndex = i
+				s.setPhaseIndex(i, now)
 				return
 			}
 		}
 	}
 
 	if evt.PhaseIndex >= 0 && evt.PhaseIndex < len(s.Phases) {
-		s.PhaseIndex = evt.PhaseIndex
+		s.setPhaseIndex(evt.PhaseIndex, now)
 	}
+}
+
+// setPhaseIndex is the single place PhaseIndex changes, so every transition
+// (name, index, value-driven or reset) records where it came from and when.
+// A no-op assignment leaves the previous transition untouched so an
+// in-progress crossfade is not restarted.
+func (s *State) setPhaseIndex(index int, now time.Time) {
+	if index == s.PhaseIndex {
+		return
+	}
+	s.PreviousPhaseIndex = s.PhaseIndex
+	s.PhaseIndex = index
+	s.PhaseChangedAt = now
 }
 
 func (s *State) mergeMeta(meta map[string]string) {
@@ -172,7 +189,6 @@ func (s *State) reset(evt input.Event, now time.Time) {
 	s.Label = ""
 	s.Meta = nil
 	s.samples = nil
-	s.PhaseIndex = 0
 	s.StartedAt = now
 
 	if evt.Total > 0 {
@@ -182,9 +198,7 @@ func (s *State) reset(evt input.Event, now time.Time) {
 	if evt.Phases != nil {
 		s.Phases = append([]string(nil), evt.Phases...)
 	}
-	if len(s.Phases) > 0 {
-		s.PhaseIndex = phaseIndexForValue(s.Value, len(s.Phases))
-	}
+	s.setPhaseIndex(phaseIndexForValue(s.Value, len(s.Phases)), now)
 
 	s.updatedAt = now
 }

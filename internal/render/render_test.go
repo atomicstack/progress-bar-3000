@@ -1,6 +1,7 @@
 package render
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -159,4 +160,65 @@ func TestRenderBarASCIIKeepsColour(t *testing.T) {
 	if StripANSI(got) != "==.." {
 		t.Fatalf("RenderBar() stripped = %q, want %q", StripANSI(got), "==..")
 	}
+}
+
+func TestRGBToHSLKnownValues(t *testing.T) {
+	tests := []struct {
+		name    string
+		in      RGB
+		h, s, l float64
+	}{
+		{name: "red", in: RGB{R: 255}, h: 0, s: 1, l: 0.5},
+		{name: "green", in: RGB{G: 255}, h: 120, s: 1, l: 0.5},
+		{name: "blue", in: RGB{B: 255}, h: 240, s: 1, l: 0.5},
+		{name: "white", in: RGB{R: 255, G: 255, B: 255}, h: 0, s: 0, l: 1},
+		{name: "black", in: RGB{}, h: 0, s: 0, l: 0},
+		{name: "grey", in: RGB{R: 128, G: 128, B: 128}, h: 0, s: 0, l: 128.0 / 255},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, s, l := RGBToHSL(tt.in)
+			if math.Abs(h-tt.h) > 0.01 || math.Abs(s-tt.s) > 0.01 || math.Abs(l-tt.l) > 0.01 {
+				t.Fatalf("RGBToHSL(%v) = (%v, %v, %v), want (%v, %v, %v)", tt.in, h, s, l, tt.h, tt.s, tt.l)
+			}
+		})
+	}
+}
+
+func TestHSLRoundTrip(t *testing.T) {
+	colors := []RGB{
+		{R: 0x00, G: 0x87, B: 0xff},
+		{R: 0xff, G: 0x5f, B: 0x00},
+		{R: 0x12, G: 0x34, B: 0x56},
+		{R: 0xab, G: 0xcd, B: 0xef},
+		{R: 0x80, G: 0x80, B: 0x80},
+		{R: 0xff, G: 0xff, B: 0xff},
+		{R: 0x00, G: 0x00, B: 0x00},
+		{R: 0x01, G: 0xfe, B: 0x7f},
+	}
+	for _, c := range colors {
+		h, s, l := RGBToHSL(c)
+		got := HSLToRGB(h, s, l)
+		if absDiff(got.R, c.R) > 1 || absDiff(got.G, c.G) > 1 || absDiff(got.B, c.B) > 1 {
+			t.Fatalf("HSLToRGB(RGBToHSL(%v)) = %v, want within 1 of original", c, got)
+		}
+	}
+}
+
+func TestHSLToRGBClampsInputs(t *testing.T) {
+	got := HSLToRGB(0, 2, 0.5)
+	if got != (RGB{R: 255}) {
+		t.Fatalf("HSLToRGB(0, 2, 0.5) = %v, want pure red (saturation clamped to 1)", got)
+	}
+	got = HSLToRGB(0, -1, 0.5)
+	if got.R != got.G || got.G != got.B {
+		t.Fatalf("HSLToRGB(0, -1, 0.5) = %v, want grey (saturation clamped to 0)", got)
+	}
+}
+
+func absDiff(a, b uint8) int {
+	if a > b {
+		return int(a - b)
+	}
+	return int(b - a)
 }

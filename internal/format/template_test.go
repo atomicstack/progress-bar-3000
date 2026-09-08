@@ -117,3 +117,31 @@ func TestTemplateParseResolvesAliasTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestTemplateTokenWidth(t *testing.T) {
+	tests := []struct {
+		name      string
+		in        string
+		token     string
+		wantWidth int
+		wantOK    bool
+	}{
+		{name: "absent", in: "%{percent} done", token: "phases", wantWidth: 0, wantOK: false},
+		{name: "present without width", in: "%{bar-only} %{phases}", token: "phases", wantWidth: 0, wantOK: true},
+		{name: "present with width", in: "%30{phases}", token: "phases", wantWidth: 30, wantOK: true},
+		{name: "first occurrence wins", in: "%12{phases} %40{phases}", token: "phases", wantWidth: 12, wantOK: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := Parse(tt.in)
+			if err != nil {
+				t.Fatalf("Parse(%q) error = %v", tt.in, err)
+			}
+			width, ok := tmpl.TokenWidth(tt.token)
+			if width != tt.wantWidth || ok != tt.wantOK {
+				t.Fatalf("TokenWidth(%q) = (%d, %v), want (%d, %v)", tt.token, width, ok, tt.wantWidth, tt.wantOK)
+			}
+		})
+	}
+}
