@@ -63,7 +63,7 @@ func (s *readerSource) Close() error {
 
 type unixSocketSource struct {
 	path       string
-	listener   *net.UnixListener
+	listener   *net.UnixListener // immutable after construction; Close may race with AcceptUnix
 	mu         sync.Mutex
 	activeConn *net.UnixConn
 	closeOnce  sync.Once
@@ -144,7 +144,6 @@ func (s *unixSocketSource) Close() error {
 		conn := s.activeConn
 		s.activeConn = nil
 		listener := s.listener
-		s.listener = nil
 		s.mu.Unlock()
 
 		if conn != nil {

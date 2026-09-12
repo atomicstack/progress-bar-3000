@@ -88,6 +88,54 @@ func TestUnixSocketSourceRejectsExistingPath(t *testing.T) {
 	}
 }
 
+func TestUnixSocketSourceCloseConcurrentWithRun(t *testing.T) {
+	// Keep the absolute socket path below the platform's Unix socket limit.
+	dir, err := os.MkdirTemp("/tmp", "pb3-close-")
+	if err != nil {
+		t.Fatalf("create socket directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path := filepath.Join(dir, "input.sock")
+	source, err := NewUnixSocketSource(path)
+	if err != nil {
+		t.Fatalf("create socket source: %v", err)
+	}
+	t.Cleanup(func() { _ = source.Close() })
+
+	start := make(chan struct{})
+	runDone := make(chan error, 1)
+	closeDone := make(chan error, 1)
+	go func() {
+		<-start
+		runDone <- source.Run(t.Context(), func(string) error { return nil })
+	}()
+	go func() {
+		<-start
+		closeDone <- source.Close()
+	}()
+	close(start)
+
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatalf("close socket source: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("close did not finish")
+	}
+	select {
+	case err := <-runDone:
+		if err != nil {
+			t.Fatalf("run after concurrent close: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("run did not exit after close")
+	}
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
+		t.Fatalf("socket path remains after close: %v", err)
+	}
+}
+
 func TestUnixSocketSourceWaitsForReconnect(t *testing.T) {
 	dir := t.TempDir()
 	wd, err := os.Getwd()

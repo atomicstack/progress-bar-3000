@@ -34,7 +34,8 @@ Top-down flow on every run:
 3. `internal/app.Model` (`model.go`) implements `tea.Model`. `View()` renders `cfg.Format` via the `fmtx` template, then appends:
    - one fixed row per key in `--detail` (`detailRenderers` map: phase/value/label)
    - one templated row per `--detail-format` occurrence (parsed once in `NewModel`)
-   - a trailing newline that absorbs Bubble Tea's shutdown `EraseEntireLine` so multi-line output survives. `--clear-on-exit` then erases the whole block from `Run`.
+   - no trailing newline: `View()` returns exactly the rendered rows joined by `\n`, so a frame occupies only the rows it prints and fits a 2-row tmux pane. After `program.Run()` returns, `finalizeRenderedBlock` in `run.go` rewrites the block row by row (or erases it row by row for `--clear-on-exit`). It deliberately avoids `CSI J`, which tmux treats as a full clear from the home position and scrolls the old rows into history, leaving a duplicate bar.
+   - the `phases` token (`%{phases}`) is rendered by `render.RenderPhases`; the model keeps a lerped scroll offset (`phasesOffset`/`phasesTarget`) and the terminal width from `tea.WindowSizeMsg` for its default budget.
 
 ### Package responsibilities
 
@@ -50,6 +51,7 @@ Top-down flow on every run:
 - **Format vs. detail must not duplicate.** The default `--format` includes `%{phase}`; `--detail=phase` and `--detail-format 'phase: ...'` also print the phase. Pick one home or you get duplication and (with short width reserves) inline truncation. The skill recipe drops `%{phase}` from the inline format.
 - **TTY requirement.** `Run` errors out if stdout isn't a TTY. Tests that exercise `View()` directly (see `internal/app/model_test.go`) avoid the TTY guard by constructing the model and calling `View()` without going through `Run`.
 - **Source vs. stdin.** When stdin is an interactive TTY, the input source becomes a no-op (`NewNullSource`) because Bubble Tea claims those bytes for key handling. Drive events via `--socket-path` in that case.
+- **Unix socket paths are length-limited.** macOS rejects `bind` for socket paths over about 104 bytes with `invalid argument`. Build socket paths with `mktemp -d -t pb3` under `$TMPDIR`, not under long scratchpad or project paths.
 - **Socket mode doesn't self-terminate.** The renderer keeps listening across producer disconnects. Callers must `kill` the renderer process (or `tmux kill-pane -t <id>` against a pane *they spawned* for the bar — capture the id from `tmux split-window -P -F '#{pane_id}'` and target only that id; never kill panes by name, position, or `-a`) and unlink the socket file when done.
 
 ## Skill / plugin coupling
