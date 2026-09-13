@@ -42,6 +42,27 @@ func TestNullSourceReturnsOnContextCancel(t *testing.T) {
 	}
 }
 
+func TestUnixSocketSourceRestrictsHookControlToOwner(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "pb3-perms-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path := filepath.Join(dir, "control.sock")
+	source, err := NewUnixSocketSource(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = source.Close() })
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("socket permissions = %o, want 600", info.Mode().Perm())
+	}
+}
+
 func TestReaderSourceEmitsLines(t *testing.T) {
 	t.Parallel()
 

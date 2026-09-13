@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A renderer-only Go CLI (`progress-bar-3000`) that draws gradient progress bars and optional detail rows in a terminal. The same repo also ships as a Claude Code plugin — `.claude-plugin/plugin.json` plus `skills/progress-bar-3000/SKILL.md` teach agents how to drive the binary. Changes to the CLI's flag surface or output shape usually need a matching edit in the skill.
+A Go terminal renderer with optional completion hooks (`progress-bar-3000`) that draws gradient progress bars and optional detail rows in a terminal. The same repo also ships as a Claude Code plugin — `.claude-plugin/plugin.json` plus `skills/progress-bar-3000/SKILL.md` teach agents how to drive the binary. Changes to the CLI's flag surface or output shape usually need a matching edit in the skill.
 
 ## Common commands
 
@@ -52,7 +52,7 @@ Top-down flow on every run:
 - **TTY requirement.** `Run` errors out if stdout isn't a TTY. Tests that exercise `View()` directly (see `internal/app/model_test.go`) avoid the TTY guard by constructing the model and calling `View()` without going through `Run`.
 - **Source vs. stdin.** When stdin is an interactive TTY, the input source becomes a no-op (`NewNullSource`) because Bubble Tea claims those bytes for key handling. Drive events via `--socket-path` in that case.
 - **Unix socket paths are length-limited.** macOS rejects `bind` for socket paths over about 104 bytes with `invalid argument`. Build socket paths with `mktemp -d -t pb3` under `$TMPDIR`, not under long scratchpad or project paths.
-- **Socket mode doesn't self-terminate.** The renderer keeps listening across producer disconnects. Callers must `kill` the renderer process (or `tmux kill-pane -t <id>` against a pane *they spawned* for the bar — capture the id from `tmux split-window -P -F '#{pane_id}'` and target only that id; never kill panes by name, position, or `-a`) and unlink the socket file when done.
+- **socket lifecycle.** socket input stays alive across client disconnects. `--on-complete` or runtime `@on-complete` / json `on_complete` registers a shell command, typically `tmux kill-pane -t <captured-pane-id>`. it fires once at actual completion; reset preserves and re-arms it. `internal/app/completion.go` owns serialized background shell processes, and `Run` waits for them before returning, so eof cannot discard cleanup. never interpolate labels/meta into a hook. sockets use mode `0600` and belong in private directories. keep temporary-directory cleanup with the caller.
 
 ## Skill / plugin coupling
 

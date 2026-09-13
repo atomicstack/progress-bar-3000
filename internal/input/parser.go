@@ -80,6 +80,8 @@ func parseControlLine(line string) (Event, error) {
 		return Event{Kind: KindPhase, PhaseIndex: index}, nil
 	case "phase-name":
 		return Event{Kind: KindPhase, PhaseName: strings.TrimSpace(rest)}, nil
+	case "on-complete":
+		return Event{Kind: KindOnComplete, Command: rest}, nil
 	case "label":
 		return Event{Kind: KindLabel, Label: strings.TrimSpace(rest)}, nil
 	case "meta":
@@ -109,15 +111,16 @@ func parseControlLine(line string) (Event, error) {
 }
 
 type jsonEvent struct {
-	Type   string            `json:"type"`
-	Amount float64           `json:"amount"`
-	Value  float64           `json:"value"`
-	Total  int               `json:"total"`
-	Index  int               `json:"index"`
-	Name   string            `json:"name"`
-	Label  string            `json:"label"`
-	Meta   map[string]string `json:"meta"`
-	Phases []string          `json:"phases"`
+	Command string            `json:"command"`
+	Type    string            `json:"type"`
+	Amount  float64           `json:"amount"`
+	Value   float64           `json:"value"`
+	Total   int               `json:"total"`
+	Index   int               `json:"index"`
+	Name    string            `json:"name"`
+	Label   string            `json:"label"`
+	Meta    map[string]string `json:"meta"`
+	Phases  []string          `json:"phases"`
 }
 
 func parseJSONEvent(line string) (Event, error) {
@@ -129,6 +132,8 @@ func parseJSONEvent(line string) (Event, error) {
 	}
 
 	switch payload.Type {
+	case string(KindOnComplete):
+		return Event{Kind: KindOnComplete, Command: payload.Command}, nil
 	case string(KindTick):
 		amount := payload.Amount
 		if amount == 0 {

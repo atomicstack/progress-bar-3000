@@ -21,7 +21,7 @@ import (
 
 var now = time.Now
 
-func Run(cfg config.Config, in io.Reader, out, _ io.Writer) error {
+func Run(cfg config.Config, in io.Reader, out, stderr io.Writer) (runErr error) {
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
 		return fmt.Errorf("stdout must be a TTY for progress rendering")
 	}
@@ -33,13 +33,22 @@ func Run(cfg config.Config, in io.Reader, out, _ io.Writer) error {
 
 	cfg.ColorMode = config.ColorMode(render.DetectProfile(string(cfg.ColorMode), autoProfile()))
 
-	program := tea.NewProgram(NewModel(cfg, initial), tea.WithOutput(out))
+	model := NewModel(cfg, initial)
+	if stderr != nil {
+		model.hooks.output = stderr
+	}
+	program := tea.NewProgram(model, tea.WithOutput(out))
 
 	source, err := newSource(cfg, in)
 	if err != nil {
 		return err
 	}
-	defer source.Close()
+	defer func() {
+		// Close the input before waiting for hooks; no more work can be queued
+		// after the program stops, and hooks must survive a producer's EOF.
+		_ = source.Close()
+		runErr = errors.Join(runErr, model.hooks.wait())
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -130,6 +130,7 @@ type Config struct {
 	PhaseFile       string
 	Phase           string
 	SocketPath      string
+	OnComplete      string
 	Width           int
 	Detail          string
 	DetailFormats   []string

@@ -1,6 +1,6 @@
 ---
 name: progress-bar-3000
-description: this skill should be used when driving a multi-step or long-running task on behalf of a user — builds, deploys, batch jobs, iterating over a known list of items — and a live progress bar with phase labels is wanted instead of a wall of log lines. trigger phrases include "show progress", "add a progress bar", "surface progress for this run", "drive the bar". the tool is a renderer only; drive it by emitting events into stdin or a unix socket, never by computing a bar directly.
+description: this skill should be used when driving a multi-step or long-running task on behalf of a user — builds, deploys, batch jobs, iterating over a known list of items — and a live progress bar with phase labels is wanted instead of a wall of log lines. trigger phrases include "show progress", "add a progress bar", "surface progress for this run", "drive the bar". drive the renderer by emitting events into stdin or a unix socket; register a completion hook to remove its own pane automatically.
 ---
 
 # progress-bar-3000
@@ -12,9 +12,9 @@ a cli that draws a gradient progress bar and phase labels in the terminal. feed 
 1. resolve your own window from `tmux display-message -p -t "$TMUX_PANE" '#{window_id}'`. every split must use `-t "$TMUX_PANE"`; never use the currently active window. abort pane creation if this lookup fails. verify the returned pane's window id matches, and save its exact pane id, pid and socket path.
 2. initialize phases with `@set-phases a,b,c` before `@phase-name a`. `--detail=phase` only displays a name; it does not create phases. `@set-phases` resets progress, so send total/value again when changing a running phase list.
 3. actually send events after creating the bar. use the verified direct socket sender below on macos. a successful producer exit is not proof that the renderer received anything.
-4. capture the exact pane with `tmux capture-pane -p -t "$pane"` after initialization and each milestone. allow a short bounded redraw delay, then require a nonempty phase and the expected progress. if the display disagrees, fix delivery before reporting success; never create extra panes to repair one stalled bar.
+4. before the final completion event, capture the exact pane with `tmux capture-pane -p -t "$pane"` after initialization and each incomplete milestone. once a teardown hook is registered, the final event closes the pane, so verify its absence instead of capturing it. allow a short bounded redraw delay, then require a nonempty phase and the expected progress. if the display disagrees, fix delivery before reporting success; never create extra panes to repair one stalled bar.
 5. advance on completed work and update phase at transitions, including tests/review. during long phases, use meaningful fractional steps or visible subphases; never manufacture progress on a timer. explain genuine waits instead of leaving an unexplained stale bar. 100% means the declared task/batch really finished.
-6. use `--style gradient-granular --tint-animation=cycle --format '%p %{percent}'` plus exactly one phase row: `--detail-format '%{phases}'` when the plan is known up front (send `@set-phases` first), else `--detail=phase`. that is bar + one row, so the bottom pane is exactly two rows (`-l 2`); add one row per extra detail row. display the phase only once. reuse an existing owned pane when appropriate; ask before teardown.
+6. use `--style gradient-granular --tint-animation=cycle --format '%p %{percent}'` plus exactly one phase row: `--detail-format '%{phases}'` when the plan is known up front (send `@set-phases` first), else `--detail=phase`. that is bar + one row, so the bottom pane is exactly two rows (`-l 2`); add one row per extra detail row. display the phase only once. reuse an existing owned pane when appropriate. register an exact-pane completion hook so successful completion removes only the pane you created.
 
 ### verified socket sender
 
@@ -39,6 +39,22 @@ tmux capture-pane -p -t "$pane"
 
 use `python -c`, not a heredoc, because stdin carries the event stream. on another platform use its available python 3 binary. if the sandbox denies tmux/socket access, request a narrowly scoped escalation; do not repeatedly retry unchanged commands or infer success from an empty tool result. this sender changes no files and does not touch the device being worked on.
 
+## automatic completion cleanup
+
+register this after the phase initialization and before doing work, using the pane id returned by your own split:
+
+```sh
+printf '@on-complete tmux kill-pane -t %s\n' "$pane" | pb_send "$sock"
+```
+
+`--on-complete 'command'` sets the same hook at startup. the socket form is convenient because the pane id is only known after creation. json clients send `{"type":"on_complete","command":"..."}`. `@on-complete` without an argument clears it.
+
+hooks run once when the actual value is at least a positive effective total, independent of rounding and animation. setting a hook after completion fires it immediately if no hook has fired. a reset (including `@set-phases`) keeps the hook and re-arms it. changing the hook after it has fired does not re-arm it. never send the final value until all task work and verification have passed.
+
+commands run in `/bin/sh -c` with inherited environment/cwd, no stdin, and output on stderr; they do not interpolate progress tokens. hooks execute serially in the background; orderly exit, including ctrl-c, waits for them and reports failures with a nonzero exit. keep cleanup finite: there is no hook timeout. socket files use mode `0600`; keep their directory private and accept only trusted event producers, since they can register shell commands.
+
+pane teardown can terminate its subprocesses, so put other cleanup before `tmux kill-pane` if combining commands. otherwise keep responsibility for temporary directories and socket files with the caller. on task failure below 100%, remove only your recorded pane explicitly; never fake 100% just to trigger cleanup.
+
 ## locating the binary
 
 snippets below invoke `./progress-bar-3000`. pick the right path for the install:
@@ -58,7 +74,7 @@ Skip it for: tasks under a few seconds, tasks with unknown unbounded work, non-i
 
 1. start the renderer with `--total N` and optionally `--phase-file` or `--detail`
 2. emit one event per tick of progress (plus phase / label changes)
-3. in socket mode, send the final value only after successful verification. stdin mode exits at eof and may snap to 100% even when its producer failed: do not use stdin mode for fallible agent workflows. the stdin examples below demonstrate event syntax, not a verified build pipeline.
+3. register the completion hook while progress is incomplete. in socket mode, send the final value only after successful verification. stdin mode exits at eof and may snap to 100% even when its producer failed: do not use stdin mode for fallible agent workflows. the stdin examples below demonstrate event syntax, not a verified build pipeline.
 
 ## Usage modes
 
@@ -94,7 +110,8 @@ Supported commands:
 | `@label <text>`      | free-form label shown in the template                  |
 | `@meta key=value`    | bind `%{meta:key}` in the format string                |
 | `@set-phases a,b,c`  | replace the phase plan                                 |
-| `@reset`             | zero the value, clear label/meta, reset rate samples   |
+| `@reset`             | zero the value, clear label/meta, reset rate samples; re-arm the hook |
+| `@on-complete <command>` | set the completion shell command; omit it to clear |
 
 ### json protocol
 
@@ -143,7 +160,7 @@ The renderer listens on a unix socket instead of stdin. Run it in one pane; send
 printf '@set-phases build,test,review\n@set-total 5\n@phase-name build\n' | pb_send /tmp/pb3.sock
 ```
 
-In socket mode the renderer does **not** exit when the producer disconnects — it keeps listening for the next client. Tear it down explicitly (`kill`, `tmux kill-pane`, or close the enclosing shell) when the task is finished.
+In socket mode the renderer does **not** exit when the producer disconnects — it keeps listening for the next client. register a completion hook to remove its owned tmux pane automatically, or stop it explicitly when finished.
 
 ### running inside tmux
 
@@ -189,6 +206,7 @@ if [[ -n "${TMUX-}" && -n "${TMUX_PANE-}" ]]; then
     --format '%p %{percent}' \
     --detail-format '%{phases}')
   pane="$(tmux split-window -t "$TMUX_PANE" -d -f -v -l 2 -P -F '#{pane_id}' "$cmd")" || exit 1
+  tmux set-option -p -t "$pane" pane-border-format ""
   actual_window=$(tmux display-message -p -t "$pane" '#{window_id}') || exit 1
   test "$actual_window" = "$own_window" || exit 1
   pane_pid=$(tmux display-message -p -t "$pane" '#{pane_pid}') || exit 1
@@ -203,13 +221,32 @@ if [[ -n "${TMUX-}" && -n "${TMUX_PANE-}" ]]; then
 
   # use pb_send from the verified socket sender above; initialize before work
   printf '@set-phases build,test,review\n@set-total 3\n@phase-name build\n' | pb_send "$sock"
+  printf '@on-complete tmux kill-pane -t %s\n' "$pane" | pb_send "$sock"
   sleep 0.1
   tmux capture-pane -p -t "$pane"
   # ... more events as work progresses ...
 
   # stop here. leave the pane running; this setup block must not tear it down.
-  # once work is complete and the bar is at 100%, ask before any removal.
+  # after successful verification, the final @value 3 closes this pane.
+  # verify its absence; clean up any remaining socket file and directory.
 fi
+```
+
+
+after the entire task and its verification succeed, complete the bar and verify automatic removal with a bounded wait:
+
+```sh
+printf '@value %s\n' "$n" | pb_send "$sock"
+for attempt in {1..40}; do
+  tmux list-panes -a -F '#{pane_id}' | grep -Fxq -- "$pane" || break
+  sleep 0.05
+done
+if tmux list-panes -a -F '#{pane_id}' | grep -Fxq -- "$pane"; then
+  printf 'completion hook did not remove the progress pane\n' >&2
+  exit 1
+fi
+rm -f -- "$sock"
+rmdir -- "$sock_dir"
 ```
 
 Key points:
@@ -223,7 +260,7 @@ Key points:
 - use a unique socket path in a directory from `mktemp -d` so concurrent agent runs don't collide. keep it short: macos rejects unix socket paths over about 104 bytes with `bind: invalid argument`, so use `mktemp -d -t pb3` under `$TMPDIR`, never a long scratchpad or project path.
 - frames occupy exactly the rows they print (bar + one detail row = 2 rows), so `-l 2` is enough for the default recipe. if the pane is shorter than the frame, bubble tea drops rows from the top and the bar vanishes first, so add one `-l` row per extra detail row.
 - without `$TMUX`, do not split. for fallible agent work use socket mode in an existing tty, or explain that no live display is available. inline piped mode is only for syntax demonstrations or infallible streams because eof can imply completion.
-- socket mode doesn't self-terminate; clean up the pane and the socket file when the task finishes — but **always ask the user first** with a simple y/n prompt (`AskUserQuestion`, or the equivalent confirmation mechanism for the harness) before running `tmux kill-pane` / `rm -f "$sock"`. wait until the related work is actually complete and the bar has been driven to 100% (`@value $total` or the final `@tick`) so the user can see the finished state. if they decline, leave the pane and socket in place — they may want to keep the bar on screen as a record, or reuse it for the next batch. only ever target the pane id captured from `tmux split-window -P -F '#{pane_id}'` — never kill by name, position, or `-a`.
+- register the completion hook while progress is incomplete, targeting only the captured pane id. the final success event then closes that pane automatically. on failure or cancellation below 100%, clean up only that recorded pane explicitly. never target a pane by name, position, or `-a`. the caller still owns temporary-directory/socket cleanup.
 
 ## Flags worth knowing
 
@@ -246,6 +283,7 @@ Key points:
 | `--detail-format '<template>'`       | extra detail row rendered via the same format-token grammar as `--format`; repeatable, rendered after the keyed `--detail` rows |
 | `--format '...'`                     | pv-style template (see tokens below)                                   |
 | `--socket-path /abs/path.sock`       | listen on a unix socket instead of stdin                               |
+| `--on-complete command` | run a shell command once at actual 100%; resets re-arm it |
 
 ### format-string tokens
 
@@ -257,7 +295,7 @@ Used in `--format` and in `@label` templating. `%%` is a literal `%`.
 - `%{phase}`, `%{phase-index}`, `%{phase-count}`
 - `%{label}`, `%{value}`, `%{total}`
 - `%{rate}` — ticks/s, `%e` / `%{eta}` — eta duration, `%t` / `%{timer}` — elapsed
-- `%{phases}` — the whole phase plan on one line with only the current phase highlighted (bold, gradient-end colour, gentle saturation pulse); other phases dim. slides to keep the current phase visible when the plan is wider than the budget (width prefix, else terminal width), with `…` at clipped edges. empty when no plan is set, so always `@set-phases` first. put it on its own `--detail-format '%{phases}'` row and add one more `-l` row to the pane.
+- `%{phases}` — the whole phase plan on one line with only the current phase highlighted (bold, gradient-end colour, gentle saturation pulse); other phases dim. slides to keep the current phase visible when the plan is wider than the budget (width prefix, else terminal width), with `…` at clipped edges. empty when no plan is set, so always `@set-phases` first. put it on its own `--detail-format '%{phases}'` row; the default two-row recipe already includes this detail row.
 - `%{meta:key}` — the current value of `@meta key=...`
 - numeric widths: `%20{bar-only}`
 

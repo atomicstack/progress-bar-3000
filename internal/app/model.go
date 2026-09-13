@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"strings"
 	"time"
@@ -31,13 +32,15 @@ type errMsg struct {
 }
 
 type Model struct {
-	cfg           config.Config
-	template      fmtx.Template
-	state         progress.State
-	detail        []config.DetailKey
-	detailFormats []fmtx.Template
-	frame         int
-	elapsed       float64
+	hooks           *completionHooks
+	completionFired bool
+	cfg             config.Config
+	template        fmtx.Template
+	state           progress.State
+	detail          []config.DetailKey
+	detailFormats   []fmtx.Template
+	frame           int
+	elapsed         float64
 	// now is the wall-clock time of the latest frame; %{timer} is
 	// rendered as now minus state.StartedAt.
 	now time.Time
@@ -98,6 +101,7 @@ func NewModel(cfg config.Config, initial progress.State) Model {
 		detailFormats = append(detailFormats, t)
 	}
 	m := Model{
+		hooks:         &completionHooks{output: io.Discard},
 		cfg:           cfg,
 		template:      tpl,
 		state:         initial,
@@ -134,11 +138,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.termWidth = msg.Width
 		return m, nil
 	case eventMsg:
+		if msg.Event.Kind == input.KindOnComplete {
+			m.cfg.OnComplete = msg.Event.Command
+			m.runCompletionHook()
+			return m, nil
+		}
+		if msg.Event.Kind == input.KindReset {
+			m.completionFired = false
+		}
 		previousDisplay := m.state.DisplayValue
 		m.state.Apply(msg.Event, msg.Now)
 		if affectsProgressValue(msg.Event.Kind) && msg.Event.Kind != input.KindReset {
 			m.state.DisplayValue = previousDisplay
 		}
+		m.runCompletionHook()
 		return m, nil
 	case frameMsg:
 		m.frame++
@@ -154,12 +167,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state.DisplayValue += gap * m.cfg.Lerp
 		}
 		m.advancePhasesOffset()
+		m.runCompletionHook()
 		return m, nextFrameCmd(m.cfg.FPS)
 	case errMsg:
 		m.err = msg.Err
 		return m, tea.Quit
 	case doneMsg:
 		m.state.DisplayValue = m.state.Value
+		m.runCompletionHook()
 		return m, tea.Quit
 	default:
 		return m, nil

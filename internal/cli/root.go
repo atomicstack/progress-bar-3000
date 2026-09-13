@@ -70,6 +70,7 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.PhaseFile, "phase-file", cfg.PhaseFile, "phase file")
 	cmd.Flags().StringVar(&cfg.Phase, "phase", cfg.Phase, "phase label")
 	cmd.Flags().StringVar(&cfg.SocketPath, "socket-path", cfg.SocketPath, "unix socket path")
+	cmd.Flags().StringVar(&cfg.OnComplete, "on-complete", cfg.OnComplete, "shell command to run once at 100% (reset re-arms it)")
 	cmd.Flags().IntVar(&cfg.Width, "width", cfg.Width, "output width")
 	cmd.Flags().StringVar(&cfg.Detail, "detail", cfg.Detail, "show extra line(s) below the bar: comma-separated list of label, phase, value, or all (bare --detail = all)")
 	cmd.Flags().Lookup("detail").NoOptDefVal = config.DetailAll

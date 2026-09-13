@@ -109,9 +109,49 @@ PYTHON
 
 send `@value` or `@tick` after work succeeds. send `@set-phases` only when initializing or replacing the plan: it resets progress. socket mode stays alive across client disconnects; press `ctrl-c` in the renderer terminal when finished.
 
+## completion hooks
+
+run a command when the actual value reaches or exceeds a positive total:
+
+```sh
+{ printf '@value 1\n'; sleep 1; printf '@value 2\n'; } | ./progress-bar-3000 \
+    --total 2 --on-complete 'printf "all done\n" >&2'
+```
+
+you can set, replace, or clear the hook at runtime through either input transport:
+
+```text
+@on-complete tmux kill-pane -t %42
+@on-complete
+```
+
+```json
+{"type":"on_complete","command":"tmux kill-pane -t %42"}
+```
+
+use the pane id returned by your own `tmux split-window -P -F '#{pane_id}'`, never a hardcoded example id or the currently active pane. after creating and initializing the renderer, register its cleanup through the socket:
+
+```sh
+# pb_send is defined in the socket-mode reference below.
+# pane is the exact id captured when you created the progress pane.
+printf '@on-complete tmux kill-pane -t %s\n' "$pane" | pb_send "$sock"
+# after all work and verification succeed:
+printf '@value %s\n' "$total" | pb_send "$sock"
+```
+
+the pane closes automatically. the [agent skill](skills/progress-bar-3000/SKILL.md#running-inside-tmux) contains the complete setup. the caller remains responsible for other resources and any socket files left behind by abruptly killing a pane. put any cleanup commands before `tmux kill-pane` in a combined hook, since removing the pane can terminate its processes.
+
+- a hook fires once per run. repeated 100% updates, overshooting, going backwards, and replacing a hook after it fires do not run it again.
+- `@reset`, `@set-phases`, and json `reset` preserve the current hook and re-arm it. an empty or whitespace-only command disables it.
+- setting a hook on an already completed run fires it immediately if no hook has fired yet. reducing the total can also complete a run. with no explicit total, the phase count is used.
+- triggering uses the actual value, not the rounded percent or animated fill. the hook may close the pane before the smoothed fill catches up. eof, input errors, and cancellation below 100% do not trigger it.
+- commands run through `/bin/sh -c`, inherit the renderer's environment and working directory, receive no stdin, and send output to stderr. labels, metadata, and format tokens are never interpolated into commands. use shell quoting for paths and arguments.
+- hooks run serially without blocking redraws. normal shutdown, including `ctrl-c`, waits for queued hooks; hook failures make the eventual process exit nonzero. hooks must finish on their own: there is no timeout or cancellation of a running hook.
+- input clients can configure executable shell commands. use trusted producers and a private socket directory. socket files are restricted to mode `0600`.
+
 ## things to know
 
-- the program renders progress; it does not execute jobs or detect their success.
+- the producer runs jobs and reports their success; the renderer only executes commands explicitly configured as completion hooks.
 - stdin eof means completion, even if a producer failed. use socket mode when failure must leave the displayed progress incomplete.
 - feed trusted labels, phases, and metadata: terminal control sequences are not sanitized. keep sockets in a private directory.
 - a bar plus one detail row needs exactly two terminal rows. avoid printing the phase in both `--format` and a detail row.
@@ -300,6 +340,7 @@ run `./progress-bar-3000 --help` for the short form. every flag is optional.
 |---|---|---|
 | `--input-mode MODE` | `auto` | one of `auto`, `lines`, `value`, `json`, `control`. only `value` changes how a line is parsed; the other four all rely on prefix auto-detection. see [Input protocols](#input-protocols). |
 | `--socket-path /ABS/PATH.sock` | | listen on a unix domain socket instead of reading stdin. must be absolute and must not already exist. |
+| `--on-complete COMMAND` | empty | run a shell command once at actual 100%; see [completion hooks](#completion-hooks). |
 
 ### layout and text
 
@@ -391,7 +432,8 @@ rest of the line is the argument. amounts may be fractional.
 | `@label <text>` | text | set the free-form label shown by `%{label}` and the `label` detail row. |
 | `@meta key=value` | `key=value` | merge one key into the meta map, read back with `%{meta:key}`. repeat to set several keys; later values overwrite earlier ones with the same key. |
 | `@set-phases a,b,c` | comma list | replace the phase plan **and reset** progress: value goes to 0, label and meta are cleared, rate samples are dropped. total is kept. an empty list keeps the existing plan but still resets. |
-| `@reset` | none | reset progress as above without changing the phase plan or total. |
+| `@reset` | none | reset progress as above without changing the phase plan or total; re-arm the completion hook. |
+| `@on-complete <command>` | shell command, optional | replace the completion hook; no command clears it. |
 
 `@set-phases` does not set the total. send `@set-total` after it (or
 before it, the total survives the reset) so the bar has a denominator.
@@ -411,8 +453,9 @@ its zero value.
 | `label` | `label` (string) | set the label. |
 | `meta` | `meta` (object of string to string) | merge keys into the meta map. |
 | `reset` | `total` (int, optional), `phases` (array of string, optional) | reset progress. a positive `total` replaces the total; a present `phases` array replaces the plan; an absent `phases` keeps it. |
+| `on_complete` | `command` (string) | replace the completion hook; an empty command clears it. |
 
-note the underscore in `set_total`. the control equivalent uses a hyphen.
+note the underscore in `set_total` and `on_complete`. the control equivalent uses a hyphen.
 
 ```bash
 printf '{"type":"reset","total":4,"phases":["a","b","c","d"]}\n{"type":"meta","meta":{"host":"db1"}}\n{"type":"tick"}\n' \
@@ -640,9 +683,9 @@ all animations are keyed to wall-clock time, so they look the same at any
 - clients connect, write newline-terminated lines in any protocol, and
   disconnect. the renderer processes one connection at a time and goes back
   to `accept` when a client hangs up.
-- the renderer **never exits on its own** in socket mode. kill the process
-  (or the tmux pane you started it in) and remove the socket file when the
-  work is done.
+- socket mode stays alive after completion unless a configured hook closes
+  its pane or process. otherwise stop it explicitly when the work is done.
+  use an [on-complete hook](#completion-hooks) to automate pane removal.
 - use a unique path from `mktemp -d` when several bars may run at once, and
   keep it short: macos rejects unix socket paths longer than about 104 bytes
   with `bind: invalid argument`. `mktemp -d -t pb3` under `$TMPDIR` is safe.

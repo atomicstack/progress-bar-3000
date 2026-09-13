@@ -82,6 +82,10 @@ func NewUnixSocketSource(path string) (Source, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen on unix socket %q: %w", path, err)
 	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = listener.Close()
+		return nil, fmt.Errorf("restrict unix socket permissions: %w", err)
+	}
 
 	return &unixSocketSource{
 		path:     path,
