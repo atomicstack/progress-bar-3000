@@ -8,18 +8,38 @@ a terminal progress renderer for shell scripts and agents. send events over stdi
 - plain lines, numeric values, control commands, or json input.
 - phase and sub-phase plans, labels, metadata, rates, and eta through format templates.
 - socket mode for long-running workflows and a bundled agent skill for tmux.
+- completion hooks for automatic cleanup, including closing the bar’s tmux pane.
 
 ## quick start
 
-requires go 1.26.2 or newer, `make`, and a terminal on macos or linux. stdout must be a tty. a truecolour terminal gives the best results.
+download a pre-built binary from [github releases](https://github.com/atomicstack/progress-bar-3000/releases/latest). go and make are only needed when building from source. run it in a terminal on macos or linux; stdout must be a tty. a truecolour terminal gives the best results.
 
-the default bar fills 90% of the terminal width and follows terminal resizing. use `--width N` for a fixed width.
+| platform | v0.3.0 download |
+|---|---|
+| macos, apple silicon | [darwin arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/progress-bar-3000_0.3.0_darwin_arm64.tar.gz) |
+| macos, intel | [darwin amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/progress-bar-3000_0.3.0_darwin_amd64.tar.gz) |
+| linux, x86-64 | [linux amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/progress-bar-3000_0.3.0_linux_amd64.tar.gz) |
+| linux, arm64 | [linux arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/progress-bar-3000_0.3.0_linux_arm64.tar.gz) |
+
+extract the matching archive. for example, on an apple silicon mac:
 
 ```sh
-git clone https://github.com/atomicstack/progress-bar-3000.git
+mkdir -p progress-bar-3000
+tar -xzf progress-bar-3000_0.3.0_darwin_arm64.tar.gz -C progress-bar-3000
 cd progress-bar-3000
-make build
+./progress-bar-3000 --help
 ```
+
+each archive contains the executable, readme, license, demos, example phase files, and agent skill/plugin files. [checksums.txt](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/checksums.txt) contains sha256 hashes. from the download directory, verify the selected archive on macos:
+
+```sh
+archive=progress-bar-3000_0.3.0_darwin_arm64.tar.gz
+awk -v archive="$archive" '$2 == archive' checksums.txt | shasum -a 256 -c -
+```
+
+on linux, select the matching archive name and use `sha256sum -c -` instead. macos binaries are not notarized.
+
+the default bar fills 90% of the terminal width and follows terminal resizing. use `--width N` for a fixed width. allow room for trailing text in your format; a dedicated `%{phases}` detail row keeps longer labels readable.
 
 one line represents one completed step:
 
@@ -30,6 +50,21 @@ one line represents one completed step:
   printf 'done\n'
 } | ./progress-bar-3000 --total 3 --detail=label
 ```
+
+### build from source
+
+requires go 1.26.2 or newer and `make`:
+
+```sh
+git clone https://github.com/atomicstack/progress-bar-3000.git
+cd progress-bar-3000
+make build
+```
+
+## recent changes
+
+- **v0.3.0:** startup and runtime sub-phase plans, optional combined progress/parent/child updates, a new rgb sub-phase demo, and a default bar width of 90% of terminal columns that follows resizing.
+- **v0.2.0:** completion hooks through `--on-complete`, socket control, or json; automatic tmux-pane cleanup; private socket permissions; updated agent guidance.
 
 ## phases and smooth gradients
 
@@ -205,7 +240,7 @@ the pane closes automatically. the [agent skill](skills/progress-bar-3000/SKILL.
 
 ## agent integration
 
-[the bundled skill](skills/progress-bar-3000/SKILL.md) describes socket control, phase updates, and a dedicated two-row tmux pane. the repository also contains a claude code plugin manifest. build the binary in the checkout or plugin directory before using the skill.
+[the bundled skill](skills/progress-bar-3000/SKILL.md) describes socket control, phase updates, and a dedicated two-row tmux pane. the repository also contains a claude code plugin manifest. release archives include the ready-to-run binary; source checkouts and source-based plugin installs need `make build` before using the skill.
 
 ## development
 
