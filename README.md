@@ -6,7 +6,7 @@ a terminal progress renderer for shell scripts and agents. send events over stdi
 
 - seven fill styles, custom gradients, and pulse, shimmer, or cycle animations.
 - plain lines, numeric values, control commands, or json input.
-- phase plans, labels, metadata, rates, and eta through format templates.
+- phase and sub-phase plans, labels, metadata, rates, and eta through format templates.
 - socket mode for long-running workflows and a bundled agent skill for tmux.
 
 ## quick start
@@ -48,6 +48,50 @@ initialize the phase plan before sending progress. this illustrative stream paus
     --color-mode truecolor --tint-animation cycle \
     --format '%p %{percent}' --detail-format '%{phases}'
 ```
+
+## sub-phases
+
+show the active child after its parent: `fetch > build [compile] > test > package`.
+
+![sub-phases changing independently and together with progress in a full-colour terminal](assets/demos/subphases.png)
+
+predefine children in a json phase file (strings and objects can be mixed):
+
+```json
+["fetch", {"name":"build","subphases":["compile","link"]}, "test", "package"]
+```
+
+```sh
+./progress-bar-3000 --phase-file testdata/phase-files/subphases.json \
+  --phase build --socket-path /tmp/pb3.sock \
+  --format '%p %{percent}' --detail-format '%{phases}'
+```
+
+or send these lines over the socket to define and select children dynamically:
+
+```text
+@phase-name build
+@set-subphases compile,link
+@subphase-name link
+```
+
+sub-phase selection can stand alone, or accompany progress in one json event:
+
+```json
+{"type":"value","value":2,"phase":"build","subphase":"link"}
+{"type":"tick","amount":0.25,"phase":"build","subphase":"link"}
+```
+
+`phase` and `subphase` are optional on `value` and `tick`. the explicit parent overrides value-to-phase mapping for that event; otherwise the child applies to the parent selected by the new value. use `{"type":"phase","name":"build","subphase":"link"}` to select both labels without changing progress. see [socket updates](#socket-updates-and-custom-rows) for sending events from python.
+
+configure another parent's children without switching the display:
+
+```json
+{"type":"set_subphases","phase":"test","subphases":["unit","integration"]}
+{"type":"subphase","phase":"test","name":"integration"}
+```
+
+the first child is selected by default. each parent remembers its selection when you leave and return. replacing a child list selects its first entry; `@set-subphases` with no argument or json `"subphases":[]` clears it. these operations leave progress, totals, rate samples, and completion hooks unchanged. `@reset` keeps child plans but selects their first entries; replacing the parent plan discards its old child plans. indexes are zero-based, names are exact, and invalid selections are ignored. plans have one level of children.
 
 ## styles
 
@@ -183,7 +227,7 @@ make build
 .venv/bin/python scripts/record-demos.py
 ```
 
-the recorder defaults to menlo on macos. on linux, pass `--font /path/to/monospace.ttf`. use `--only phases`, `styles`, `animations`, or `socket` to regenerate one demo. recording dependencies are optional and are not needed to build or use the cli.
+the recorder defaults to menlo on macos. on linux, pass `--font /path/to/monospace.ttf`. use `--only phases`, `subphases`, `styles`, `animations`, or `socket` to regenerate one demo. recording dependencies are optional and are not needed to build or use the cli.
 
 ## license
 
@@ -431,6 +475,9 @@ rest of the line is the argument. amounts may be fractional.
 | `@set-total <n>` | integer | change the denominator. does not touch the value. |
 | `@phase <index>` | integer, 0-based | select a phase by index. out-of-range indexes are ignored. |
 | `@phase-name <name>` | text | select a phase by exact name. unknown names are ignored. |
+| `@set-subphases a,b` | comma list, optional | replace the current parent’s child list, selecting the first; no argument clears it. progress is unchanged. |
+| `@subphase <index>` | integer, 0-based | select a child of the current parent. invalid indexes are ignored. |
+| `@subphase-name <name>` | text | select a child by exact name. unknown names are ignored. |
 | `@label <text>` | text | set the free-form label shown by `%{label}` and the `label` detail row. |
 | `@meta key=value` | `key=value` | merge one key into the meta map, read back with `%{meta:key}`. repeat to set several keys; later values overwrite earlier ones with the same key. |
 | `@set-phases a,b,c` | comma list | replace the phase plan **and reset** progress: value goes to 0, label and meta are cleared, rate samples are dropped. total is kept. an empty list keeps the existing plan but still resets. |
@@ -443,18 +490,20 @@ before it, the total survives the reset) so the bar has a denominator.
 ### json protocol
 
 one json object per line. unknown fields are rejected, so keep payloads to
-the fields listed. every field other than `type` is optional and defaults to
-its zero value.
+the fields listed. fields default to their zero values unless marked required.
+`subphase` requires either `name` or `index`; `set_subphases` requires an array.
 
 | `type` | fields | effect |
 |---|---|---|
-| `tick` | `amount` (float, `0` or absent means `1`), `label` (string, optional) | add `amount` to the value and, if `label` is non-empty, set the label. |
-| `value` | `value` (float) | set the absolute value. |
+| `tick` | `amount` (float, `0` or absent means `1`), optional `label`, `phase`, `subphase` (strings) | add `amount` to the value and, if `label` is non-empty, set the label. |
+| `value` | `value` (float), optional `phase`, `subphase` (strings) | set the absolute value. |
 | `set_total` | `total` (int) | change the denominator. |
-| `phase` | `name` (string) or `index` (int, 0-based) | select a phase. `name` wins when both are present. a `phases` array on this event is rejected; use `reset` to change the plan. |
+| `phase` | `name` (string) or `index` (int, 0-based), optional `subphase` (string) | select a phase. `name` wins when both are present. a `phases` array on this event is rejected; use `reset` to change the plan. |
+| `set_subphases` | `subphases` (required string array), `phase` (optional parent name) | replace a child plan; `[]` clears it. omitted parent targets the current phase. |
+| `subphase` | `name` (string) or `index` (int, 0-based), `phase` (optional parent name) | select a child without changing progress or the current parent. `name` wins; invalid selections are ignored. |
 | `label` | `label` (string) | set the label. |
 | `meta` | `meta` (object of string to string) | merge keys into the meta map. |
-| `reset` | `total` (int, optional), `phases` (array of string, optional) | reset progress. a positive `total` replaces the total; a present `phases` array replaces the plan; an absent `phases` keeps it. |
+| `reset` | `total` (int, optional), `phases` (array of strings or phase objects, optional) | reset progress. a positive `total` replaces the total; a present `phases` array replaces the plan; an absent `phases` keeps it. |
 | `on_complete` | `command` (string) | replace the completion hook; an empty command clears it. |
 
 note the underscore in `set_total` and `on_complete`. the control equivalent uses a hyphen.
@@ -470,10 +519,9 @@ printf '{"type":"reset","total":4,"phases":["a","b","c","d"]}\n{"type":"meta","m
 
 - **plain text**: one phase name per line, blank lines ignored
   (`testdata/phase-files/phases.txt`).
-- **json array of strings** when the extension is `.json`
-  (`testdata/phase-files/phases.json`).
+- **json array of strings or objects** when the extension is `.json`. an object has `name` and optional `subphases` (an array of nonempty strings). unknown object fields and deeper nesting are rejected. flat arrays remain supported (`testdata/phase-files/phases.json`); see `testdata/phase-files/subphases.json` for children. json `reset` accepts the same plan format.
 
-if `--total` is `0`, it is set to the number of phases.
+if `--total` is `0`, it is set to the number of parent phases; children never add steps.
 
 ## progress semantics
 
@@ -489,7 +537,7 @@ current phase is recomputed from it: value 1 maps to phase 0, value 2 to
 phase 1, and so on, clamped to the last phase. this means with a plan of n
 phases and a total of n, ticking after each phase automatically advances the
 phase row. an explicit `@phase`/`@phase-name` overrides the mapping until the
-next value change.
+next value change. json `value` and `tick` can include optional `phase` and `subphase` strings to update those labels atomically with progress. json `phase` accepts an optional `subphase` too. invalid explicit parents leave the automatic progress mapping in effect and skip the child selection.
 
 **phase index in templates.** `%{phase-index}` is 1-based for display;
 `@phase` takes a 0-based index.
@@ -532,7 +580,8 @@ mistakes fail before the bar draws.
 |---|---|
 | `%p`, `%{progress}`, `%{bar-only}` | the bar. width comes from the prefix, then a positive `--width`, otherwise 90% of terminal columns. before terminal dimensions arrive, assumes 80 columns (a 72-column bar). text around the bar is additional. |
 | `%{percent}` | `NN%`, rounded to an integer. |
-| `%{phase}` | current phase name, or empty if no plan. |
+| `%{phase}` | current phase with its active child, e.g. `build [link]`; empty if no plan. |
+| `%{subphase}` | active child name without brackets; empty if the current parent has no children. |
 | `%{phase-index}` | current phase number, 1-based. |
 | `%{phase-count}` | number of phases in the plan. |
 | `%{label}` | the last `@label` text. |
@@ -560,10 +609,10 @@ the phase is printed twice. pick one home for it.
 ### phase strip
 
 `%{phases}` renders every phase in the plan on one line, joined by ` › `
-(` > ` under `--ascii`). only the current phase is highlighted: it is drawn
+(` > ` under `--ascii`). the active child, if any, appears as ` [child]` immediately after the current parent and shares its highlight and scrolling budget. other parents show only their names. only the current phase is highlighted: it is drawn
 bold in the `--gradient-end` colour with a slow saturation pulse. completed
 and pending phases are both dimmed. with `--color-mode none` the current
-phase is wrapped in `[brackets]` instead. the token renders nothing when no
+phase is wrapped in `[brackets]` instead, followed by a separate child bracket when present: `[build] [link]`. the token renders nothing when no
 phase plan is loaded, so it only earns its place when the phase names are
 known up front via `--phase-file`, `@set-phases`, or a json `reset`.
 

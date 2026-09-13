@@ -11,6 +11,7 @@ import (
 // fraction and the lerped scroll offset) so this renderer stays pure.
 type PhasesOptions struct {
 	Phases        []string
+	Subphase      string
 	CurrentIndex  int
 	PreviousIndex int
 	// Fade is the crossfade progress from PreviousIndex to CurrentIndex:
@@ -139,6 +140,9 @@ func rasterisePhases(opts PhasesOptions) ([]cell, []span) {
 		cells = appendText(cells, name, class, i)
 		if bracket && class == cellHighlight {
 			cells = appendText(cells, "]", class, i)
+		}
+		if class == cellHighlight && opts.Subphase != "" {
+			cells = appendText(cells, " ["+opts.Subphase+"]", class, i)
 		}
 		spans[i] = span{start: start, end: len(cells)}
 	}

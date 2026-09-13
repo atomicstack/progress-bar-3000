@@ -106,10 +106,11 @@ func TestLoadPhaseFileSupportsTextAndJSON(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := LoadPhaseFile(tc.path)
+			plan, err := LoadPhaseFile(tc.path)
 			if err != nil {
 				t.Fatalf("LoadPhaseFile() error = %v", err)
 			}
+			got := plan.Names
 			if len(got) != len(tc.want) {
 				t.Fatalf("LoadPhaseFile() len = %d, want %d: %#v", len(got), len(tc.want), got)
 			}

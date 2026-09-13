@@ -67,7 +67,7 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	cmd.Flags().StringVar((*string)(&cfg.ColorMode), "color-mode", string(cfg.ColorMode), "color mode")
 	cmd.Flags().StringVar(&cfg.GradientStart, "gradient-start", cfg.GradientStart, "gradient start color")
 	cmd.Flags().StringVar(&cfg.GradientEnd, "gradient-end", cfg.GradientEnd, "gradient end color")
-	cmd.Flags().StringVar(&cfg.PhaseFile, "phase-file", cfg.PhaseFile, "phase file")
+	cmd.Flags().StringVar(&cfg.PhaseFile, "phase-file", cfg.PhaseFile, "phase plan file (text names or json with optional subphases)")
 	cmd.Flags().StringVar(&cfg.Phase, "phase", cfg.Phase, "phase label")
 	cmd.Flags().StringVar(&cfg.SocketPath, "socket-path", cfg.SocketPath, "unix socket path")
 	cmd.Flags().StringVar(&cfg.OnComplete, "on-complete", cfg.OnComplete, "shell command to run once at 100% (reset re-arms it)")

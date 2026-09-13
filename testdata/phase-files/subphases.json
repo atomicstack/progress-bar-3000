@@ -1,0 +1,6 @@
+[
+  "fetch",
+  {"name": "build", "subphases": ["compile", "link"]},
+  {"name": "test", "subphases": ["unit", "integration"]},
+  "package"
+]

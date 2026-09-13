@@ -147,13 +147,15 @@ func bootstrapState(cfg config.Config) (progress.State, error) {
 	}
 
 	if cfg.PhaseFile != "" {
-		phases, err := input.LoadPhaseFile(cfg.PhaseFile)
+		plan, err := input.LoadPhaseFile(cfg.PhaseFile)
 		if err != nil {
 			return progress.State{}, err
 		}
-		state.Phases = phases
+		state.Apply(input.Event{Kind: input.KindReset, Phases: plan.Names, PhaseSubphases: plan.Subphases}, state.StartedAt)
+		state.Value = float64(cfg.Current)
+		state.DisplayValue = state.Value
 		if state.Total == 0 {
-			state.Total = len(phases)
+			state.Total = len(plan.Names)
 		}
 	}
 

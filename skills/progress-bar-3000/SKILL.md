@@ -113,6 +113,44 @@ Supported commands:
 | `@reset`             | zero the value, clear label/meta, reset rate samples; re-arm the hook |
 | `@on-complete <command>` | set the completion shell command; omit it to clear |
 
+### sub-phase plans and combined updates
+
+use one level of children when a parent has finer steps. only the current parent's selected child appears in the phase strip: `build [compile] › test › package`. `%{phase}` and `--detail=phase` include the same suffix; `%{subphase}` is the bare child name. this fits the existing two-row pane: keep `--format '%p %{percent}' --detail-format '%{phases}'`.
+
+startup plans can use a json phase file:
+
+```json
+["fetch", {"name":"build","subphases":["compile","link"]}, "test", "package"]
+```
+
+pass it with `--phase-file plan.json`; `--phase build` optionally selects the starting parent. json `reset` accepts this same mixed array in `phases`. plain-text files and flat string arrays still work.
+
+when children become known during work, define them without resetting progress:
+
+```sh
+printf '@phase-name build\n@set-subphases compile,link\n' | pb_send "$sock"
+# after moving to the linking task, without advancing progress:
+printf '@subphase-name link\n' | pb_send "$sock"
+# or update actual progress and both labels atomically:
+printf '%s\n' '{"type":"value","value":42,"phase":"build","subphase":"link"}' | pb_send "$sock"
+```
+
+`phase` and `subphase` are optional on json `value` and `tick` events (the latter accepts fractional `amount`). the explicit parent overrides the normal value-to-phase mapping for that event. omit it to target the parent selected by the new value. use json `phase` with `name` or `index` plus `subphase` to select both labels without a value change. standalone `@subphase 1` (zero-based) or `@subphase-name link` never advances progress. sub-phase selection is optional on every progress update.
+
+configure or select a future parent's child without changing the current parent:
+
+```json
+{"type":"set_subphases","phase":"test","subphases":["unit","integration"]}
+{"type":"subphase","phase":"test","name":"integration"}
+```
+
+omit `phase` to target the current parent. json `subphase` also accepts zero-based `index`; `name` wins when both are present. invalid parent or child selections are ignored. child names must be nonempty strings; use json for names containing commas.
+
+- the first child is selected by default; switching parents remembers each selection.
+- replacing a child list selects its first entry. `@set-subphases` with no argument or json `"subphases":[]` clears the list. neither operation resets progress, affects rate samples, changes the total, or re-arms a completion hook.
+- `@reset` preserves child plans but resets all selections to their first child. replacing the parent plan (`@set-phases` or json reset with `phases`) discards old child plans; structured json can supply replacements.
+- progress remains explicitly controlled by value/tick events. reaching the last child does not mean the parent or run completed. keep using verified milestones and send the final value only after all work succeeds.
+
 ### json protocol
 
 Same semantics, stricter format — use when the producer is a program, not a shell.
@@ -267,7 +305,7 @@ Key points:
 | flag                                 | what it does                                                           |
 |--------------------------------------|------------------------------------------------------------------------|
 | `--total N` / `--current N`          | denominator and starting value                                         |
-| `--phase-file path`                  | load phase names before any events arrive                              |
+| `--phase-file path`                  | load phase names and optional json sub-phase plans before events arrive                              |
 | `--phase name`                       | set the starting phase by name                                         |
 | `--style ...`                        | plain / block / granular / shaded / gradient-{block,granular,shaded}   |
 | `--bg-style ...`                     | none / space / ascii / shade-light / shade-medium / shade-dark / custom|

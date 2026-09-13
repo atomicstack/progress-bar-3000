@@ -3,15 +3,17 @@ package input
 type Kind string
 
 const (
-	KindTick       Kind = "tick"
-	KindValue      Kind = "value"
-	KindIncrement  Kind = "increment"
-	KindSetTotal   Kind = "set_total"
-	KindPhase      Kind = "phase"
-	KindLabel      Kind = "label"
-	KindMeta       Kind = "meta"
-	KindReset      Kind = "reset"
-	KindOnComplete Kind = "on_complete"
+	KindTick         Kind = "tick"
+	KindValue        Kind = "value"
+	KindIncrement    Kind = "increment"
+	KindSetTotal     Kind = "set_total"
+	KindPhase        Kind = "phase"
+	KindLabel        Kind = "label"
+	KindMeta         Kind = "meta"
+	KindReset        Kind = "reset"
+	KindOnComplete   Kind = "on_complete"
+	KindSetSubphases Kind = "set_subphases"
+	KindSubphase     Kind = "subphase"
 )
 
 type Event struct {
@@ -25,4 +27,10 @@ type Event struct {
 	Meta       map[string]string
 	Phases     []string
 	Command    string
+	// parent phase is optional: an empty name targets the current phase.
+	ParentPhase    string
+	SubphaseName   string
+	SubphaseIndex  int
+	Subphases      []string
+	PhaseSubphases map[int][]string
 }

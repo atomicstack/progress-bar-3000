@@ -2,6 +2,7 @@ package progress
 
 import (
 	"math"
+	"slices"
 	"time"
 
 	"progress-bar-3000/internal/input"
@@ -27,6 +28,12 @@ type State struct {
 
 	updatedAt time.Time
 	samples   []sample
+	subphases map[int]subphaseState
+}
+
+type subphaseState struct {
+	names []string
+	index int
 }
 
 type sample struct {
@@ -41,18 +48,29 @@ func (s *State) Apply(evt input.Event, now time.Time) {
 		if evt.Kind == input.KindTick && delta == 0 {
 			delta = 1
 		}
-		s.setValue(s.Value+delta, now)
+		s.setValue(s.Value+delta, evt, now)
 		// A plain input line ticks and carries its text as the label; an
 		// unlabelled tick must not wipe the label a previous one set.
 		if evt.Label != "" {
 			s.Label = evt.Label
 		}
 	case input.KindValue:
-		s.setValue(evt.Value, now)
+		s.setValue(evt.Value, evt, now)
 	case input.KindSetTotal:
 		s.Total = evt.Total
 	case input.KindPhase:
+		// an invalid parent must not redirect a combined child selection.
+		if evt.SubphaseName != "" && !s.validPhaseEvent(evt) {
+			break
+		}
 		s.applyPhase(evt, now)
+		if evt.SubphaseName != "" {
+			s.selectSubphase(s.PhaseIndex, evt.SubphaseName, 0)
+		}
+	case input.KindSetSubphases:
+		s.setSubphases(s.parentIndex(evt.ParentPhase), evt.Subphases)
+	case input.KindSubphase:
+		s.selectSubphase(s.parentIndex(evt.ParentPhase), evt.SubphaseName, evt.SubphaseIndex)
 	case input.KindLabel:
 		s.Label = evt.Label
 	case input.KindMeta:
@@ -99,6 +117,69 @@ func (s *State) CurrentPhase() string {
 	return s.Phases[index]
 }
 
+// CurrentSubphase is the selected child of the active parent, if it has a plan.
+func (s *State) CurrentSubphase() string {
+	children := s.subphases[s.PhaseIndex]
+	if s.PhaseIndex < 0 || s.PhaseIndex >= len(s.Phases) || children.index < 0 || children.index >= len(children.names) {
+		return ""
+	}
+	return children.names[children.index]
+}
+
+// PhaseLabel appends the active child while keeping CurrentPhase a plain identity.
+func (s *State) PhaseLabel() string {
+	name := s.CurrentPhase()
+	if child := s.CurrentSubphase(); child != "" {
+		name += " [" + child + "]"
+	}
+	return name
+}
+
+func (s *State) parentIndex(name string) int {
+	if name != "" {
+		return slices.Index(s.Phases, name)
+	}
+	if s.PhaseIndex >= 0 && s.PhaseIndex < len(s.Phases) {
+		return s.PhaseIndex
+	}
+	return -1
+}
+
+func (s *State) validPhaseEvent(evt input.Event) bool {
+	if evt.PhaseName != "" {
+		return slices.Contains(s.Phases, evt.PhaseName)
+	}
+	return evt.PhaseIndex >= 0 && evt.PhaseIndex < len(s.Phases)
+}
+
+func (s *State) setSubphases(parent int, names []string) {
+	if parent < 0 || parent >= len(s.Phases) {
+		return
+	}
+	if len(names) == 0 {
+		delete(s.subphases, parent)
+		return
+	}
+	if s.subphases == nil {
+		s.subphases = make(map[int]subphaseState)
+	}
+	s.subphases[parent] = subphaseState{names: slices.Clone(names)}
+}
+
+func (s *State) selectSubphase(parent int, name string, index int) {
+	children, ok := s.subphases[parent]
+	if !ok {
+		return
+	}
+	if name != "" {
+		index = slices.Index(children.names, name)
+	}
+	if index >= 0 && index < len(children.names) {
+		children.index = index
+		s.subphases[parent] = children
+	}
+}
+
 func (s *State) RatePerSecond() float64 {
 	if len(s.samples) < 2 {
 		return 0
@@ -130,10 +211,23 @@ func (s *State) ETA() time.Duration {
 	return time.Duration((remaining / rate) * float64(time.Second))
 }
 
-func (s *State) setValue(value float64, now time.Time) {
+func (s *State) setValue(value float64, evt input.Event, now time.Time) {
 	s.Value = value
 	s.DisplayValue = value
-	s.setPhaseIndex(phaseIndexForValue(value, len(s.Phases)), now)
+	parent := phaseIndexForValue(value, len(s.Phases))
+	validParent := true
+	if evt.ParentPhase != "" {
+		index := s.parentIndex(evt.ParentPhase)
+		validParent = index >= 0
+		if validParent {
+			parent = index
+		}
+	}
+	// resolve the final parent once so atomic updates cannot create phantom fades.
+	s.setPhaseIndex(parent, now)
+	if validParent && evt.SubphaseName != "" {
+		s.selectSubphase(parent, evt.SubphaseName, 0)
+	}
 	s.recordSample(value, now)
 }
 
@@ -197,6 +291,15 @@ func (s *State) reset(evt input.Event, now time.Time) {
 	// A nil phase list means "keep the current plan"; an explicit empty slice clears it.
 	if evt.Phases != nil {
 		s.Phases = append([]string(nil), evt.Phases...)
+		s.subphases = nil
+		for parent, names := range evt.PhaseSubphases {
+			s.setSubphases(parent, names)
+		}
+	} else {
+		for parent, children := range s.subphases {
+			children.index = 0
+			s.subphases[parent] = children
+		}
 	}
 	s.setPhaseIndex(phaseIndexForValue(s.Value, len(s.Phases)), now)
 

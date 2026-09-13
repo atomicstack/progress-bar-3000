@@ -80,6 +80,28 @@ func parseControlLine(line string) (Event, error) {
 		return Event{Kind: KindPhase, PhaseIndex: index}, nil
 	case "phase-name":
 		return Event{Kind: KindPhase, PhaseName: strings.TrimSpace(rest)}, nil
+	case "set-subphases":
+		names := []string{}
+		if rest != "" {
+			for _, part := range strings.Split(rest, ",") {
+				names = append(names, strings.TrimSpace(part))
+			}
+		}
+		if err := validateSubphases(names); err != nil {
+			return Event{}, err
+		}
+		return Event{Kind: KindSetSubphases, Subphases: names}, nil
+	case "subphase":
+		index, err := strconv.Atoi(rest)
+		if err != nil {
+			return Event{}, fmt.Errorf("parse @subphase index: %w", err)
+		}
+		return Event{Kind: KindSubphase, SubphaseIndex: index}, nil
+	case "subphase-name":
+		if rest == "" {
+			return Event{}, fmt.Errorf("parse @subphase-name: name is required")
+		}
+		return Event{Kind: KindSubphase, SubphaseName: rest}, nil
 	case "on-complete":
 		return Event{Kind: KindOnComplete, Command: rest}, nil
 	case "label":
@@ -111,16 +133,19 @@ func parseControlLine(line string) (Event, error) {
 }
 
 type jsonEvent struct {
-	Command string            `json:"command"`
-	Type    string            `json:"type"`
-	Amount  float64           `json:"amount"`
-	Value   float64           `json:"value"`
-	Total   int               `json:"total"`
-	Index   int               `json:"index"`
-	Name    string            `json:"name"`
-	Label   string            `json:"label"`
-	Meta    map[string]string `json:"meta"`
-	Phases  []string          `json:"phases"`
+	Command   string            `json:"command"`
+	Type      string            `json:"type"`
+	Amount    float64           `json:"amount"`
+	Value     float64           `json:"value"`
+	Total     int               `json:"total"`
+	Index     *int              `json:"index"`
+	Name      string            `json:"name"`
+	Label     string            `json:"label"`
+	Meta      map[string]string `json:"meta"`
+	Phases    *PhasePlan        `json:"phases"`
+	Phase     string            `json:"phase"`
+	Subphase  string            `json:"subphase"`
+	Subphases []string          `json:"subphases"`
 }
 
 func parseJSONEvent(line string) (Event, error) {
@@ -130,8 +155,38 @@ func parseJSONEvent(line string) (Event, error) {
 	if err := decoder.Decode(&payload); err != nil {
 		return Event{}, fmt.Errorf("parse json event: %w", err)
 	}
+	if payload.Phase != "" {
+		switch payload.Type {
+		case string(KindValue), string(KindTick), string(KindSubphase), string(KindSetSubphases):
+		default:
+			return Event{}, fmt.Errorf("json %s event does not accept phase; phase events use name or index", payload.Type)
+		}
+	}
+	if payload.Subphase != "" {
+		switch payload.Type {
+		case string(KindValue), string(KindTick), string(KindPhase):
+		default:
+			return Event{}, fmt.Errorf("json %s event does not accept subphase; use a value, tick, or phase event", payload.Type)
+		}
+	}
+	if payload.Subphases != nil && payload.Type != string(KindSetSubphases) {
+		return Event{}, fmt.Errorf("json %s event does not accept subphases; use set_subphases or a structured reset plan", payload.Type)
+	}
 
 	switch payload.Type {
+	case string(KindSetSubphases):
+		if payload.Subphases == nil {
+			return Event{}, fmt.Errorf("json set_subphases event requires a subphases array (use [] to clear)")
+		}
+		if err := validateSubphases(payload.Subphases); err != nil {
+			return Event{}, err
+		}
+		return Event{Kind: KindSetSubphases, ParentPhase: payload.Phase, Subphases: payload.Subphases}, nil
+	case string(KindSubphase):
+		if payload.Name == "" && payload.Index == nil {
+			return Event{}, fmt.Errorf("json subphase event requires name or index")
+		}
+		return Event{Kind: KindSubphase, ParentPhase: payload.Phase, SubphaseName: payload.Name, SubphaseIndex: indexOrZero(payload.Index)}, nil
 	case string(KindOnComplete):
 		return Event{Kind: KindOnComplete, Command: payload.Command}, nil
 	case string(KindTick):
@@ -139,23 +194,35 @@ func parseJSONEvent(line string) (Event, error) {
 		if amount == 0 {
 			amount = 1
 		}
-		return Event{Kind: KindTick, Amount: amount, Label: payload.Label}, nil
+		return Event{Kind: KindTick, Amount: amount, Label: payload.Label, ParentPhase: payload.Phase, SubphaseName: payload.Subphase}, nil
 	case string(KindValue):
-		return Event{Kind: KindValue, Value: payload.Value}, nil
+		return Event{Kind: KindValue, Value: payload.Value, ParentPhase: payload.Phase, SubphaseName: payload.Subphase}, nil
 	case "set_total":
 		return Event{Kind: KindSetTotal, Total: payload.Total}, nil
 	case string(KindPhase):
-		if len(payload.Phases) > 0 {
+		if payload.Phases != nil && len(payload.Phases.Names) > 0 {
 			return Event{}, fmt.Errorf(`json phase event does not accept "phases"; use a reset event`)
 		}
-		return Event{Kind: KindPhase, PhaseIndex: payload.Index, PhaseName: payload.Name}, nil
+		return Event{Kind: KindPhase, PhaseIndex: indexOrZero(payload.Index), PhaseName: payload.Name, SubphaseName: payload.Subphase}, nil
 	case string(KindLabel):
 		return Event{Kind: KindLabel, Label: payload.Label}, nil
 	case string(KindMeta):
 		return Event{Kind: KindMeta, Meta: payload.Meta}, nil
 	case string(KindReset):
-		return Event{Kind: KindReset, Total: payload.Total, Phases: payload.Phases}, nil
+		evt := Event{Kind: KindReset, Total: payload.Total}
+		if payload.Phases != nil {
+			evt.Phases = payload.Phases.Names
+			evt.PhaseSubphases = payload.Phases.Subphases
+		}
+		return evt, nil
 	default:
 		return Event{}, fmt.Errorf("unknown json event type %q", payload.Type)
 	}
+}
+
+func indexOrZero(index *int) int {
+	if index == nil {
+		return 0
+	}
+	return *index
 }

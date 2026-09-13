@@ -76,7 +76,7 @@ const (
 // detailRow renders one detail line below the bar from the current state.
 // Centralised so that the formatting for each row lives in exactly one place.
 var detailRenderers = map[config.DetailKey]func(progress.State) string{
-	config.DetailPhase: func(s progress.State) string { return fmt.Sprintf("phase: %s", s.CurrentPhase()) },
+	config.DetailPhase: func(s progress.State) string { return fmt.Sprintf("phase: %s", s.PhaseLabel()) },
 	config.DetailValue: func(s progress.State) string { return fmt.Sprintf("value: %.0f/%d", s.Value, s.EffectiveTotal()) },
 	config.DetailLabel: func(s progress.State) string { return fmt.Sprintf("label: %s", s.Label) },
 }
@@ -265,7 +265,9 @@ func (r resolver) Resolve(name string, width int) string {
 	case "percent":
 		return fmt.Sprintf("%.0f%%", r.state.Percent())
 	case "phase":
-		return r.state.CurrentPhase()
+		return r.state.PhaseLabel()
+	case "subphase":
+		return r.state.CurrentSubphase()
 	case "phase-index":
 		return fmt.Sprintf("%d", r.state.PhaseIndex+1)
 	case "phase-count":
@@ -308,6 +310,7 @@ func phasesBudget(prefixWidth, termWidth int) int {
 func phasesOptions(cfg config.Config, state progress.State, elapsed float64, now time.Time, offset, width int) render.PhasesOptions {
 	return render.PhasesOptions{
 		Phases:        state.Phases,
+		Subphase:      state.CurrentSubphase(),
 		CurrentIndex:  state.PhaseIndex,
 		PreviousIndex: state.PreviousPhaseIndex,
 		Fade:          phasesFade(state, now),

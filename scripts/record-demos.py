@@ -4,6 +4,7 @@
 import argparse
 import codecs
 import fcntl
+import json
 import os
 from pathlib import Path
 import pty
@@ -193,14 +194,39 @@ def phased(elapsed, _, duration):
             f'@label {label}\n@meta objects={step * 600}\n')
 
 
+def subphased(elapsed, _, duration):
+    frame = round(elapsed * FPS)
+    interval = round((duration - 1) * FPS / 8)
+    if frame % interval:
+        return ''
+    plans = {'fetch': ['discover', 'download'], 'build': ['compile', 'link'],
+             'test': ['unit', 'integration'], 'package': ['archive', 'checksum']}
+    events = []
+    if frame == 0:
+        events.extend({'type': 'set_subphases', 'phase': phase, 'subphases': children}
+                      for phase, children in plans.items())
+    step = min(8, frame // interval)
+    if step == 3:
+        # switch the child independently, keeping progress at 25%.
+        events.append({'type': 'subphase', 'name': 'link'})
+    else:
+        phase = ['fetch', 'fetch', 'build', 'build', 'test', 'test', 'package', 'package', 'package'][step]
+        child = ['discover', 'download', 'compile', 'link', 'unit', 'integration', 'archive', 'checksum', 'checksum'][step]
+        events.append({'type': 'value', 'value': [0, 10, 25, 25, 50, 60, 75, 90, 100][step],
+                       'phase': phase, 'subphase': child})
+    return ''.join(json.dumps(event) + '\n' for event in events)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--font', default='/System/Library/Fonts/Menlo.ttc', help='monospace font file')
-    parser.add_argument('--only', choices=['phases', 'styles', 'animations', 'socket'])
+    parser.add_argument('--only', choices=['phases', 'subphases', 'styles', 'animations', 'socket'])
     args = parser.parse_args()
     demos = {
         'phases': ('progress-bar-3000', 'smooth progress · highlighted phase plan · 24-bit rgb',
                    [('', ['--tint-animation', 'cycle', '--detail-format', '%{phases}'], 2)], phased, 8),
+        'subphases': ('a little more detail', 'sub-phases · combined updates · independent selection · 24-bit rgb',
+                      [('', ['--tint-animation', 'cycle', '--detail-format', '%{phases}'], 2)], subphased, 10),
         'styles': ('choose your texture', 'the same progress, rendered with different fill and track styles',
                    [(style, ['--style', style, '--bg-style', 'shade-light'], 1)
                     for style in ['plain', 'block', 'granular', 'shaded', 'gradient-block', 'gradient-granular', 'gradient-shaded']], progress, 7),
