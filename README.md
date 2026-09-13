@@ -13,6 +13,8 @@ a terminal progress renderer for shell scripts and agents. send events over stdi
 
 requires go 1.26.2 or newer, `make`, and a terminal on macos or linux. stdout must be a tty. a truecolour terminal gives the best results.
 
+the default bar fills 90% of the terminal width and follows terminal resizing. use `--width N` for a fixed width.
+
 ```sh
 git clone https://github.com/atomicstack/progress-bar-3000.git
 cd progress-bar-3000
@@ -347,7 +349,7 @@ run `./progress-bar-3000 --help` for the short form. every flag is optional.
 | flag | default | description |
 |---|---|---|
 | `--format TEMPLATE` | `%p %{percent} %{phase}` | template for the first row. see [Format templates](#format-templates). |
-| `--width N` | `0` (means 20) | bar width in columns. applies to `%p` when the token has no explicit width prefix. |
+| `--width N` | `0` (automatic) | bar width in columns. automatic uses 90% of the terminal width, rounded down with a minimum of one column, and follows resizing. a positive value stays fixed. template width prefixes take precedence. |
 | `--detail[=KEYS]` | | extra rows below the bar: a comma-separated list of `phase`, `value`, `label`, or `all`. a bare `--detail` means `all`. note the `=`: `--detail phase` does not work because the flag takes an optional value. |
 | `--detail-format TEMPLATE` | | one more row rendered from a template. repeatable; rows appear in the order given, after the keyed `--detail` rows. |
 | `--clear-on-exit` | `false` | erase the bar and detail rows when the program exits instead of leaving them on screen. |
@@ -528,7 +530,7 @@ mistakes fail before the bar draws.
 
 | token | renders as |
 |---|---|
-| `%p`, `%{progress}`, `%{bar-only}` | the bar. width comes from the prefix, then `--width`, then 20. |
+| `%p`, `%{progress}`, `%{bar-only}` | the bar. width comes from the prefix, then a positive `--width`, otherwise 90% of terminal columns. before terminal dimensions arrive, assumes 80 columns (a 72-column bar). text around the bar is additional. |
 | `%{percent}` | `NN%`, rounded to an integer. |
 | `%{phase}` | current phase name, or empty if no plan. |
 | `%{phase-index}` | current phase number, 1-based. |

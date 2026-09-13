@@ -45,7 +45,7 @@ type Model struct {
 	// rendered as now minus state.StartedAt.
 	now time.Time
 	// termWidth is the column count from the latest tea.WindowSizeMsg; zero
-	// until one arrives, in which case %{phases} falls back to 80.
+	// until one arrives, in which case automatic widths assume 80 columns.
 	termWidth int
 	// hasPhases reports whether any template uses %{phases}; phasesWidth is
 	// that token's width prefix (0 = use the terminal width). phasesOffset
@@ -59,7 +59,8 @@ type Model struct {
 }
 
 const (
-	phasesToken = "phases"
+	defaultTerminalWidth = 80
+	phasesToken          = "phases"
 	// phasesFadeDuration is how long the crossfade between the previous
 	// and current phase lasts after a transition.
 	phasesFadeDuration = 300 * time.Millisecond
@@ -67,7 +68,6 @@ const (
 	// oscillation of the highlight colour.
 	phasesPulsePeriod    = 2.0
 	phasesPulseAmplitude = 0.15
-	phasesDefaultWidth   = 80
 	// phasesSnapDistance is how close (in columns) the lerped offset must
 	// get to its target before it snaps onto it.
 	phasesSnapDistance = 0.5
@@ -239,7 +239,11 @@ func (r resolver) Resolve(name string, width int) string {
 			if r.cfg.Width > 0 {
 				barWidth = r.cfg.Width
 			} else {
-				barWidth = 20
+				terminalWidth := r.termWidth
+				if terminalWidth <= 0 {
+					terminalWidth = defaultTerminalWidth
+				}
+				barWidth = max(1, terminalWidth*9/10)
 			}
 		}
 		start, end := animatedGradient(r.cfg)
@@ -298,7 +302,7 @@ func phasesBudget(prefixWidth, termWidth int) int {
 	if termWidth > 0 {
 		return termWidth
 	}
-	return phasesDefaultWidth
+	return defaultTerminalWidth
 }
 
 func phasesOptions(cfg config.Config, state progress.State, elapsed float64, now time.Time, offset, width int) render.PhasesOptions {

@@ -71,7 +71,7 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.Phase, "phase", cfg.Phase, "phase label")
 	cmd.Flags().StringVar(&cfg.SocketPath, "socket-path", cfg.SocketPath, "unix socket path")
 	cmd.Flags().StringVar(&cfg.OnComplete, "on-complete", cfg.OnComplete, "shell command to run once at 100% (reset re-arms it)")
-	cmd.Flags().IntVar(&cfg.Width, "width", cfg.Width, "output width")
+	cmd.Flags().IntVar(&cfg.Width, "width", cfg.Width, "bar width in columns (0 = 90% of terminal width, follows resizing)")
 	cmd.Flags().StringVar(&cfg.Detail, "detail", cfg.Detail, "show extra line(s) below the bar: comma-separated list of label, phase, value, or all (bare --detail = all)")
 	cmd.Flags().Lookup("detail").NoOptDefVal = config.DetailAll
 	cmd.Flags().StringArrayVar(&cfg.DetailFormats, "detail-format", cfg.DetailFormats, "additional detail row rendered from a format-string template (repeatable; same tokens as --format)")

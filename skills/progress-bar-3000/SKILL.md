@@ -278,7 +278,7 @@ Key points:
 | `--ascii`                            | force `=` fill and `.` track glyphs regardless of style (colour kept)  |
 | `--fps 15 \| 30 \| 60`                | render rate                                                            |
 | `--lerp 0.18`                        | display-value smoothing factor (0 < lerp ≤ 1; higher = snappier)       |
-| `--width N`                          | bar width in columns (default 20)                                      |
+| `--width N`                          | fixed bar width in columns; omitted or 0 uses 90% of terminal columns and follows resizing |
 | `--detail[=keys]`                    | extra rows below the bar; comma list of `label`/`phase`/`value`, or `all` (bare `--detail` = `all`) |
 | `--detail-format '<template>'`       | extra detail row rendered via the same format-token grammar as `--format`; repeatable, rendered after the keyed `--detail` rows |
 | `--format '...'`                     | pv-style template (see tokens below)                                   |
