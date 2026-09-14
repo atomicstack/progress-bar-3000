@@ -14,32 +14,32 @@ a terminal progress renderer for shell scripts and agents. send events over stdi
 
 download a pre-built binary from [github releases](https://github.com/atomicstack/progress-bar-3000/releases/latest). go and make are only needed when building from source. run it in a terminal on macos or linux; stdout must be a tty. a truecolour terminal gives the best results.
 
-| platform | v0.3.0 download |
+| platform | v0.4.0 download |
 |---|---|
-| macos, apple silicon | [darwin arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/progress-bar-3000_0.3.0_darwin_arm64.tar.gz) |
-| macos, intel | [darwin amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/progress-bar-3000_0.3.0_darwin_amd64.tar.gz) |
-| linux, x86-64 | [linux amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/progress-bar-3000_0.3.0_linux_amd64.tar.gz) |
-| linux, arm64 | [linux arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/progress-bar-3000_0.3.0_linux_arm64.tar.gz) |
+| macos, apple silicon | [darwin arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.4.0/progress-bar-3000_0.4.0_darwin_arm64.tar.gz) |
+| macos, intel | [darwin amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.4.0/progress-bar-3000_0.4.0_darwin_amd64.tar.gz) |
+| linux, x86-64 | [linux amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.4.0/progress-bar-3000_0.4.0_linux_amd64.tar.gz) |
+| linux, arm64 | [linux arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.4.0/progress-bar-3000_0.4.0_linux_arm64.tar.gz) |
 
 extract the matching archive. for example, on an apple silicon mac:
 
 ```sh
 mkdir -p progress-bar-3000
-tar -xzf progress-bar-3000_0.3.0_darwin_arm64.tar.gz -C progress-bar-3000
+tar -xzf progress-bar-3000_0.4.0_darwin_arm64.tar.gz -C progress-bar-3000
 cd progress-bar-3000
 ./progress-bar-3000 --help
 ```
 
-each archive contains the executable, readme, license, demos, example phase files, and agent skill/plugin files. [checksums.txt](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.3.0/checksums.txt) contains sha256 hashes. from the download directory, verify the selected archive on macos:
+each archive contains the executable, readme, license, demos, example phase files, and agent skill/plugin files. [checksums.txt](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.4.0/checksums.txt) contains sha256 hashes. from the download directory, verify the selected archive on macos:
 
 ```sh
-archive=progress-bar-3000_0.3.0_darwin_arm64.tar.gz
+archive=progress-bar-3000_0.4.0_darwin_arm64.tar.gz
 awk -v archive="$archive" '$2 == archive' checksums.txt | shasum -a 256 -c -
 ```
 
 on linux, select the matching archive name and use `sha256sum -c -` instead. macos binaries are not notarized.
 
-the default bar fills 90% of the terminal width and follows terminal resizing. use `--width N` for a fixed width. allow room for trailing text in your format; a dedicated `%{phases}` detail row keeps longer labels readable.
+the default bar fills 90% of the terminal width and follows terminal resizing. use `--width full` to fit the complete row to the viewport, or `--width N` for a fixed bar width. allow room for trailing text in your format; a dedicated `%{phases}` detail row keeps longer labels readable.
 
 one line represents one completed step:
 
@@ -63,6 +63,7 @@ make build
 
 ## recent changes
 
+- **v0.4.0:** acknowledged `send` batches, one-call `tmux-start`, full-viewport row sizing with `--width full`, descriptive socket path errors, and a streamlined agent skill.
 - **v0.3.0:** startup and runtime sub-phase plans, optional combined progress/parent/child updates, a new rgb sub-phase demo, and a default bar width of 90% of terminal columns that follows resizing.
 - **v0.2.0:** completion hooks through `--on-complete`, socket control, or json; automatic tmux-pane cleanup; private socket permissions; updated agent guidance.
 
@@ -117,7 +118,7 @@ sub-phase selection can stand alone, or accompany progress in one json event:
 {"type":"tick","amount":0.25,"phase":"build","subphase":"link"}
 ```
 
-`phase` and `subphase` are optional on `value` and `tick`. the explicit parent overrides value-to-phase mapping for that event; otherwise the child applies to the parent selected by the new value. use `{"type":"phase","name":"build","subphase":"link"}` to select both labels without changing progress. see [socket updates](#socket-updates-and-custom-rows) for sending events from python.
+`phase` and `subphase` are optional on `value` and `tick`. the explicit parent overrides value-to-phase mapping for that event; otherwise the child applies to the parent selected by the new value. use `{"type":"phase","name":"build","subphase":"link"}` to select both labels without changing progress. see [socket updates](#socket-updates-and-custom-rows) for sending acknowledged events with the built-in sender.
 
 configure another parent's children without switching the display:
 
@@ -171,7 +172,7 @@ printf 'socket: %s/progress.sock\n' "$sock_dir"
 rmdir "$sock_dir"
 ```
 
-from another terminal, use the printed socket path with the built-in sender (available in source builds after v0.3.0):
+from another terminal, use the printed socket path with the built-in sender (available since v0.4.0):
 
 ```sh
 ./progress-bar-3000 send --socket-path /tmp/pb3.XXXXXX/progress.sock \
@@ -233,7 +234,7 @@ the pane closes automatically. the [agent skill](skills/progress-bar-3000/SKILL.
 
 ## agent integration
 
-source builds after v0.3.0 include one-call startup and acknowledged updates:
+v0.4.0 includes one-call startup and acknowledged updates:
 
 ```sh
 ./progress-bar-3000 tmux-start --phases build,test,review --total 3 --width full --auto-close
@@ -241,7 +242,7 @@ source builds after v0.3.0 include one-call startup and acknowledged updates:
 ./progress-bar-3000 send --socket-path /tmp/pb-123456/p.sock '@value 1' '@phase-name test'
 ```
 
-see [one-call tmux bootstrap](#one-call-tmux-bootstrap) for defaults and returned handles. these helpers are not in the v0.3.0 prebuilt downloads yet.
+see [one-call tmux bootstrap](#one-call-tmux-bootstrap) for defaults and returned handles. these helpers are included in the v0.4.0 prebuilt downloads.
 
 [the bundled skill](skills/progress-bar-3000/SKILL.md) describes socket control, phase updates, and a dedicated two-row tmux pane. the repository also contains a claude code plugin manifest. release archives include the ready-to-run binary; source checkouts and source-based plugin installs need `make build` before using the skill.
 
@@ -777,7 +778,7 @@ printf '@value 2\n@phase-name review\n' | ./progress-bar-3000 send --socket-path
 ./progress-bar-3000 send --socket-path "$sock" --json '{"type":"value","value":2,"phase":"review","subphase":"docs"}'
 ```
 
-use a sender and renderer that both include these helpers (source builds after v0.3.0). `send` reads one event per argument, or newline-delimited stdin if none are supplied. it validates the whole batch before applying events. the renderer acknowledges after applying the batch, before starting completion hooks that might close the pane. unknown phase/subphase names retain their existing ignored-selection behaviour.
+use a sender and renderer that both include these helpers (v0.4.0 or newer). `send` reads one event per argument, or newline-delimited stdin if none are supplied. it validates the whole batch before applying events. the renderer acknowledges after applying the batch, before starting completion hooks that might close the pane. unknown phase/subphase names retain their existing ignored-selection behaviour.
 
 | sender flag | default | description |
 |---|---|---|

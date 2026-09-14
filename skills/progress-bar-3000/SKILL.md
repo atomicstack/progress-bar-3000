@@ -9,7 +9,7 @@ a terminal progress renderer. report completed work; it draws the bar. use socke
 
 ## one-call start, one-line updates
 
-these helpers require a source build after v0.3.0. in a checkout, run `make build` once if needed and use the absolute path to its `progress-bar-3000` binary. for a source-based plugin install, use `$CLAUDE_PLUGIN_ROOT/progress-bar-3000` after `make -C "$CLAUDE_PLUGIN_ROOT" build`. release installations can use the binary on `PATH` when their version includes these helpers. substitute that binary path for `progress-bar-3000` in every example; no `--help` probing is needed.
+these helpers require v0.4.0 or newer. in a checkout, run `make build` once if needed and use the absolute path to its `progress-bar-3000` binary. for a source-based plugin install, use `$CLAUDE_PLUGIN_ROOT/progress-bar-3000` after `make -C "$CLAUDE_PLUGIN_ROOT" build`. release installations can use the v0.4.0 or newer binary on `PATH`. substitute that binary path for `progress-bar-3000` in every example; no `--help` probing is needed.
 
 inside tmux, start the whole initialized display with one invocation:
 
