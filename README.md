@@ -4,7 +4,7 @@ a terminal progress renderer for shell scripts and agents. send events over stdi
 
 ![a full-colour progress bar advancing through fetch, build, test, and package](assets/demos/phases.png)
 
-- seven fill styles, custom gradients, and pulse, shimmer, or cycle animations.
+- seven fill styles, custom gradients, ambient colour animations, and optional event effects.
 - plain lines, numeric values, control commands, or json input.
 - phase and sub-phase plans, labels, metadata, rates, and eta through format templates.
 - socket mode for long-running workflows and a bundled agent skill for tmux.
@@ -153,6 +153,37 @@ set `--tint-animation` to `pulse`, `shimmer`, or `cycle`. customize the endpoint
     --gradient-start '#ff70d2' --gradient-end '#00d8ff'
 ```
 
+### eight new animation reels
+
+these additional effects are currently available in source builds after v0.4.0. [open the local animation gallery](assets/demos/animation-reel.html) after cloning this branch, or select a separate animated png below. every reel records the real cli with `--style granular --color-mode truecolor`; no palette conversion is applied.
+
+| animation | option | reel |
+|---|---|---|
+| aurora | `--tint-animation aurora` | [drifting colour curtains](assets/demos/animation-aurora.png) |
+| comet | `--tint-animation comet` | [bright head and fading trail](assets/demos/animation-comet.png) |
+| interference | `--tint-animation interference` | [opposing waves of light](assets/demos/animation-interference.png) |
+| embers | `--tint-animation embers` | [warm sparks near the leading edge](assets/demos/animation-embers.png) |
+| liquid | `--tint-animation liquid` | [soft colour eddies](assets/demos/animation-liquid.png) |
+| edge glow | `--tint-animation edge-glow` | [breathing boundary halo](assets/demos/animation-edge-glow.png) |
+| milestone ripple | `--milestone-ripple` | [backward ripples on progress advances](assets/demos/animation-milestone-ripple.png) |
+| phase transition | `--phase-transition` | [colour waves on phase changes](assets/demos/animation-phase-transition.png) |
+
+combine one ambient animation with either or both event effects:
+
+```sh
+./progress-bar-3000 --socket-path /tmp/pb3.sock --total 100 \
+    --style granular --color-mode truecolor --width full \
+    --gradient-start '#ff70d2' --gradient-end '#00d8ff' \
+    --tint-animation aurora --milestone-ripple --phase-transition \
+    --format '%p %{percent}' --detail-format '%{phases}'
+```
+
+initialize the phase plan first using `send`, then report actual work as usual. effects only change colour; they preserve every fill glyph, the displayed percentage, and the dim unfilled track. the six ambient effects keep moving while progress is held. with `--color-mode none`, all tint effects disappear.
+
+milestone ripples start only on forward value/tick/increment updates that advance the filled fraction, last up to 1.4 seconds, and grow brighter with larger advances. duplicate/backward updates and denominator-only changes do not start a ripple. phase waves last 1.2 seconds and react to the visible parent or child changing, including combined json updates; hidden future-child changes and ignored selections do not trigger them. a batch that restores the same final visible phase does not animate its intermediate phase mappings.
+
+both event effects default off and can be combined with any ambient tint. only the newest event of each kind is retained, so rapid updates replace their previous effect. resetting or replacing the parent plan clears old effects. completion hooks retain their immediate behaviour: animations never postpone cleanup, so an auto-closing pane can disappear before its final effect finishes.
+
 ## socket updates and custom rows
 
 keep the renderer alive while separate clients report completed work. labels and metadata make it easy to show what is happening.
@@ -266,7 +297,7 @@ make build
 .venv/bin/python scripts/record-demos.py
 ```
 
-the recorder defaults to menlo on macos. on linux, pass `--font /path/to/monospace.ttf`. use `--only phases`, `subphases`, `styles`, `animations`, or `socket` to regenerate one demo. recording dependencies are optional and are not needed to build or use the cli.
+the recorder defaults to menlo on macos. on linux, pass `--font /path/to/monospace.ttf`. use `--only phases`, `subphases`, `styles`, `animations`, or `socket` to regenerate one original demo. use `--only animation-reel` for all eight new reels, or `--only animation-aurora` (and the other animation names) for an individual reel. recording dependencies are optional and are not needed to build or use the cli.
 
 ## license
 
@@ -447,7 +478,9 @@ run `./progress-bar-3000 --help` for the short form. renderer flags are optional
 | `--color-mode MODE` | `auto` | `auto`, `truecolor`, `256`, `16`, `none`. `auto` reads the terminal's advertised profile via termenv. |
 | `--gradient-start HEX` | `#ffffff` | colour of the leftmost cell. six hex digits, `#` optional. |
 | `--gradient-end HEX` | `#0087ff` | colour of the rightmost cell. |
-| `--tint-animation KIND` | | `pulse`, `shimmer`, or `cycle`. omit for a static bar. |
+| `--tint-animation KIND` | | `pulse`, `shimmer`, `cycle`, `aurora`, `comet`, `interference`, `embers`, `liquid`, or `edge-glow`. omit for no ambient tint animation. |
+| `--milestone-ripple` | `false` | a brief backward ripple on actual progress advances; composable with ambient tint. |
+| `--phase-transition` | `false` | a brief colour wave when the visible phase or subphase changes; composable with ambient tint. |
 | `--ascii` | `false` | force ascii glyphs: the fill becomes `=` with no partial cells whatever `--style` says, and any non-ascii track glyph (the shade styles, or a non-ascii `--bg-char`) becomes `.`. colour is unaffected; add `--color-mode none` for a plain-text bar. |
 
 ### motion
@@ -755,14 +788,21 @@ capabilities. `none` emits no escape codes at all.
 
 ### tint animations
 
-all animations are keyed to wall-clock time, so they look the same at any
-`--fps`.
+ambient animations use wall-clock time and event effects use elapsed time since their triggering event, so pacing is independent of `--fps`.
 
 | `--tint-animation` | effect |
 |---|---|
 | `pulse` | the whole fill brightens and dims on a 2.5 s cycle, returning exactly to the base colour at the trough. |
 | `shimmer` | a soft bright band sweeps left to right across both fill and track every 2.8 s, entering and leaving off the edges. |
 | `cycle` | the gradient slides along the bar on a 4 s loop, folded as start→end→start so there is no visible seam. |
+| `aurora` | broad, saturated colour curtains drift at different speeds, anchored to the configured gradient. |
+| `comet` | a bright head with a fading tail travels through the filled span every 3.2 s. |
+| `interference` | opposing waves create moving intersections of light. |
+| `embers` | deterministic warm sparks brighten and fade, concentrated near the fill boundary. |
+| `liquid` | smooth colour currents bend into slow eddies. |
+| `edge-glow` | a localized halo expands and contracts at the fill boundary every 2.8 s. |
+
+see [eight new animation reels](#eight-new-animation-reels) for granular demos and the independent `--milestone-ripple` / `--phase-transition` overlays.
 
 ## socket mode
 

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>progress-bar-3000 · animation reel</title>
+<style>
+  :root { color-scheme: dark; font-family: ui-monospace, monospace; background: #10141f; color: #dbe5f5; }
+  body { max-width: 1320px; margin: auto; padding: 40px 24px 64px; line-height: 1.65; }
+  h1 { font-size: clamp(26px, 4vw, 42px); letter-spacing: -.05em; margin: 0; }
+  h2 { font-size: 21px; margin: 0; }
+  p { color: #aebbd0; margin: 10px 0 20px; }
+  a { color: #87dcff; text-underline-offset: 4px; }
+  header { max-width: 900px; margin-bottom: 36px; }
+  .eyebrow { color: #ff9bdd; font-size: 12px; letter-spacing: .14em; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+  article { background: #151b29; border: 1px solid #2b354b; border-radius: 14px; padding: 22px; min-width: 0; }
+  article p { min-height: 3.3em; font-size: 14px; }
+  img { display: block; width: 100%; height: auto; border-radius: 8px; }
+  .preview { display: block; margin: 0 -10px 18px; }
+  code { font: 12px/1.65 ui-monospace, monospace; overflow-wrap: anywhere; }
+  pre { white-space: pre-wrap; background: #0d111a; padding: 14px; border-radius: 8px; margin-bottom: 0; }
+  footer { margin-top: 32px; color: #aebbd0; font-size: 13px; }
+  @media (max-width: 850px) { .grid { grid-template-columns: 1fr; } body { padding: 28px 16px; } }
+</style>
+<header>
+  <p class="eyebrow">progress-bar-3000 / eight animations</p>
+  <h1>colour, in motion.</h1>
+  <p>real cli recordings, rendered with <code>--style granular --color-mode truecolor</code>.
+    each lossless rgb animation loops for ten seconds at approximately 15 frames per second.
+    select a preview to open its full-size animated png.</p>
+  <p>the six ambient effects hold at 68% for four seconds, then fill to completion.
+    the two event effects use discrete milestone and phase updates so their triggers are easy to see.</p>
+</header>
+<main class="grid">
+  <article>
+    <h2>01 / aurora</h2>
+    <p>soft colour bands drift through the fill. compare the movement while progress holds steady.</p>
+    <a class="preview" href="animation-aurora.png" aria-label="open full-size aurora animation"><img src="animation-aurora.png" alt="aurora animation on a granular progress bar"></a>
+    <pre><code>./progress-bar-3000 --socket-path /tmp/pb3-demo.sock --color-mode truecolor --fps 30 --width 54 --format '%p %{percent}' --style granular --gradient-start '#ff70d2' --gradient-end '#00d8ff' --tint-animation aurora</code></pre>
+  </article>
+  <article>
+    <h2>02 / comet</h2>
+    <p>a bright head travels through the fill with a fading tail behind it.</p>
+    <a class="preview" href="animation-comet.png" aria-label="open full-size comet animation"><img src="animation-comet.png" alt="comet animation on a granular progress bar"></a>
+    <pre><code>./progress-bar-3000 --socket-path /tmp/pb3-demo.sock --color-mode truecolor --fps 30 --width 54 --format '%p %{percent}' --style granular --gradient-start '#ff70d2' --gradient-end '#00d8ff' --tint-animation comet</code></pre>
+  </article>
+  <article>
+    <h2>03 / interference</h2>
+    <p>overlapping colour waves move through each other, creating changing bands of light.</p>
+    <a class="preview" href="animation-interference.png" aria-label="open full-size interference animation"><img src="animation-interference.png" alt="interference animation on a granular progress bar"></a>
+    <pre><code>./progress-bar-3000 --socket-path /tmp/pb3-demo.sock --color-mode truecolor --fps 30 --width 54 --format '%p %{percent}' --style granular --gradient-start '#ff70d2' --gradient-end '#00d8ff' --tint-animation interference</code></pre>
+  </article>
+  <article>
+    <h2>04 / embers</h2>
+    <p>small warm sparks flicker through the fill, changing locally while progress is held.</p>
+    <a class="preview" href="animation-embers.png" aria-label="open full-size embers animation"><img src="animation-embers.png" alt="embers animation on a granular progress bar"></a>
+    <pre><code>./progress-bar-3000 --socket-path /tmp/pb3-demo.sock --color-mode truecolor --fps 30 --width 54 --format '%p %{percent}' --style granular --gradient-start '#ff70d2' --gradient-end '#00d8ff' --tint-animation embers</code></pre>
+  </article>
+  <article>
+    <h2>05 / liquid</h2>
+    <p>slow colour currents flow through the fill with a softer, rolling rhythm.</p>
+    <a class="preview" href="animation-liquid.png" aria-label="open full-size liquid animation"><img src="animation-liquid.png" alt="liquid animation on a granular progress bar"></a>
+    <pre><code>./progress-bar-3000 --socket-path /tmp/pb3-demo.sock --color-mode truecolor --fps 30 --width 54 --format '%p %{percent}' --style granular --gradient-start '#ff70d2' --gradient-end '#00d8ff' --tint-animation liquid</code></pre>
+  </article>
+  <article>
+    <h2>06 / edge glow</h2>
+    <p>a breathing highlight stays near the leading edge and follows it as the bar fills.</p>
+    <a class="preview" href="animation-edge-glow.png" aria-label="open full-size edge glow animation"><img src="animation-edge-glow.png" alt="edge glow animation on a granular progress bar"></a>
+    <pre><code>./progress-bar-3000 --socket-path /tmp/pb3-demo.sock --color-mode truecolor --fps 30 --width 54 --format '%p %{percent}' --style granular --gradient-start '#ff70d2' --gradient-end '#00d8ff' --tint-animation edge-glow</code></pre>
+  </article>
+  <article>
+    <h2>07 / milestone ripple</h2>
+    <p>discrete updates cross 25%, 50%, 75%, and 100%, with two seconds between events.</p>
+    <a class="preview" href="animation-milestone-ripple.png" aria-label="open full-size milestone ripple animation"><img src="animation-milestone-ripple.png" alt="milestone ripples triggered by progress updates"></a>
+    <pre><code>./progress-bar-3000 --socket-path /tmp/pb3-demo.sock --color-mode truecolor --fps 30 --width 54 --format '%p %{percent}' --style granular --gradient-start '#ff70d2' --gradient-end '#00d8ff' --milestone-ripple</code></pre>
+  </article>
+  <article>
+    <h2>08 / phase transition</h2>
+    <p>progress stays at 68% while the phase changes from fetch to build, test, and package.</p>
+    <a class="preview" href="animation-phase-transition.png" aria-label="open full-size phase transition animation"><img src="animation-phase-transition.png" alt="phase transition colour washes with a highlighted phase plan"></a>
+    <pre><code>./progress-bar-3000 --socket-path /tmp/pb3-demo.sock --color-mode truecolor --fps 30 --width 54 --format '%p %{percent}' --style granular --gradient-start '#ff70d2' --gradient-end '#00d8ff' --phase-transition --detail-format '%{phases}'</code></pre>
+  </article>
+</main>
+<footer>
+  <p>commands show the recording flags with a reusable example socket path.
+    the recorder sends <code>@set-phases fetch,build,test,package</code> before other events,
+    sets the total to 100, then sends the real progress or phase events shown above.
+    use a separate socket path for each simultaneous renderer.</p>
+  <p>re-record all eight from the repository root with
+    <code>python scripts/record-demos.py --only animation-reel</code>
+    after building the cli and installing pillow and pyte. this gallery works directly from disk.</p>
+</footer>
+</html>

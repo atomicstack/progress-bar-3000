@@ -132,6 +132,16 @@ def record(name, title, subtitle, specs, update, duration, font_path):
                 if time.monotonic() > deadline:
                     raise RuntimeError('renderer did not display its initialized frame')
                 time.sleep(.03)
+            if name.startswith('animation-'):
+                # Let the initial fill settle before capturing the loop's poster.
+                # Later milestone and phase events still occur at their real times.
+                for i, terminal in enumerate(terminals):
+                    send(terminal.path, update(0, i, duration))
+                deadline = time.monotonic() + .7
+                while time.monotonic() < deadline:
+                    for terminal in terminals:
+                        terminal.read()
+                    time.sleep(.02)
             started = time.monotonic()
             count = round(duration * FPS)
             for frame in range(count):
@@ -217,10 +227,61 @@ def subphased(elapsed, _, duration):
     return ''.join(json.dumps(event) + '\n' for event in events)
 
 
+def ambient_reel(elapsed, _, duration):
+    value = 68 + min(1, max(0, (elapsed - 4) / (duration - 6))) * 32
+    return f'@value {value:.2f}\n'
+
+
+def milestone_reel(elapsed, _, duration):
+    frame = round(elapsed * FPS)
+    interval = round(duration * FPS / 5)
+    if frame % interval:
+        return ''
+    value = (10, 25, 50, 75, 100)[min(4, frame // interval)]
+    return f'@value {value}\n'
+
+
+def phase_reel(elapsed, _, duration):
+    frame = round(elapsed * FPS)
+    interval = round(duration * FPS / 4)
+    if frame % interval:
+        return ''
+    phase = ('fetch', 'build', 'test', 'package')[min(3, frame // interval)]
+    return json.dumps({'type': 'value', 'value': 68, 'phase': phase}) + '\n'
+
+
+def animation_demos():
+    common = ['--style', 'granular', '--color-mode', 'truecolor',
+              '--gradient-start', '#ff70d2', '--gradient-end', '#00d8ff']
+    descriptions = {
+        'aurora': 'soft colour bands drift through the fill',
+        'comet': 'a bright head travels with a fading tail',
+        'interference': 'overlapping colour waves move through each other',
+        'embers': 'small warm sparks flicker through the fill',
+        'liquid': 'slow colour currents flow through the fill',
+        'edge-glow': 'a breathing highlight follows the leading edge',
+    }
+    demos = {
+        f'animation-{name}': (name, description + ' · hold, then fill',
+                            [('', [*common, '--tint-animation', name], 1)],
+                            ambient_reel, 10)
+        for name, description in descriptions.items()
+    }
+    demos['animation-milestone-ripple'] = (
+        'milestone ripple', 'discrete updates cross 25%, 50%, 75%, and 100% · two-second holds',
+        [('', [*common, '--milestone-ripple'], 1)], milestone_reel, 10)
+    demos['animation-phase-transition'] = (
+        'phase transition', 'actual phase changes at a held 68% · watch the highlighted phase',
+        [('', [*common, '--phase-transition', '--detail-format', '%{phases}'], 2)],
+        phase_reel, 10)
+    return demos
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--font', default='/System/Library/Fonts/Menlo.ttc', help='monospace font file')
-    parser.add_argument('--only', choices=['phases', 'subphases', 'styles', 'animations', 'socket'])
+    parser.add_argument('--only', choices=['phases', 'subphases', 'styles', 'animations', 'socket',
+                                          'animation-reel', *animation_demos()])
     args = parser.parse_args()
     demos = {
         'phases': ('progress-bar-3000', 'smooth progress · highlighted phase plan · 24-bit rgb',
@@ -238,8 +299,10 @@ def main():
                           '--detail-format', '%{phases}', '--detail-format', '%{label}',
                           '--detail-format', 'objects: %{meta:objects} / 2400'], 4)], phased, 8),
     }
+    demos.update(animation_demos())
     for name, demo in demos.items():
-        if args.only is None or args.only == name:
+        if (args.only is None or args.only == name
+                or args.only == 'animation-reel' and name.startswith('animation-')):
             record(name, *demo, args.font)
 
 

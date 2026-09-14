@@ -142,6 +142,14 @@ startup `--phase-file plan.json` accepts mixed names and objects:
 
 for a bootstrap-created pane, send a json `reset` with this `phases` array and the desired `total` while progress is still zero. `@reset` retains child plans and returns selections to their first entries. replacing the parent plan discards old children; structured json can provide replacements. reaching the last child never implies completion.
 
+## optional animation effects
+
+source builds after v0.4.0 add ambient `--tint-animation aurora`, `comet`, `interference`, `embers`, `liquid`, and `edge-glow` alongside `pulse`, `shimmer`, and `cycle`. renderer flags `--milestone-ripple` and `--phase-transition` add independent event effects; combine either or both with one ambient tint. these renderer flags are not accepted by `send` or `tmux-start`; the standard bootstrap retains its cycle default.
+
+milestone ripples react only to forward value/tick/increment updates that advance the filled fraction and last up to 1.4 seconds. phase waves react to visible parent/subphase changes and last 1.2 seconds. unchanged, ignored or hidden child selections do not start a wave. a batch's intermediate phase mappings do not trigger a wave if the final visible phase is unchanged. both effects default off, retain only their newest event, and reset with the parent plan or `@reset`. animations never change actual progress or delay completion hooks.
+
+the repository's `assets/demos/animation-reel.html` gallery contains individual truecolour granular recordings of all eight effects. honest progress rules still apply: continuous animation indicates a live renderer, not proof that task work is advancing.
+
 ## completion and cleanup
 
 bootstrap's default hook removes its socket file, removes its private directory, then invokes `tmux kill-pane -t` with the exact returned pane id. with `--auto-close=false`, cleanup is the caller's responsibility. if you replace the hook to add other cleanup, retain these actions and put pane removal last: removing the pane may terminate its subprocesses.
