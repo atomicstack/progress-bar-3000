@@ -52,8 +52,11 @@ func (m *Model) applyEvent(evt input.Event, at time.Time) {
 	if evt.Kind == input.KindReset {
 		m.completionFired = false
 	}
+	previousValue := m.state.Value
+	previousPhase, previousChild, previousIndex := m.state.CurrentPhase(), m.state.CurrentSubphase(), m.state.PhaseIndex
 	previousDisplay := m.state.DisplayValue
 	m.state.Apply(evt, at)
+	m.recordAnimationEvent(evt, at, previousValue, previousPhase, previousChild, previousIndex)
 	if affectsProgressValue(evt.Kind) && evt.Kind != input.KindReset {
 		m.state.DisplayValue = previousDisplay
 	}

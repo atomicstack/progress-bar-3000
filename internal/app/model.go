@@ -32,6 +32,7 @@ type errMsg struct {
 }
 
 type Model struct {
+	animations      animationEvents
 	hooks           *completionHooks
 	completionFired bool
 	cfg             config.Config
@@ -142,12 +143,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.runCompletionHook()
 		return m, nil
 	case batchMsg:
+		previousPhase, previousChild, previousIndex := m.state.CurrentPhase(), m.state.CurrentSubphase(), m.state.PhaseIndex
+		previousPhaseAt := m.animations.phaseAt
+		reset := false
 		var commands []string
 		for _, evt := range msg.Events {
+			reset = reset || evt.Kind == input.KindReset
 			m.applyEvent(evt, msg.Now)
 			if command := m.takeCompletionCommand(); command != "" {
 				commands = append(commands, command)
 			}
+		}
+		// a batch renders only its final state. suppress waves for transient
+		// phase mappings that an explicit phase event restores before redraw.
+		if !reset && previousPhase == m.state.CurrentPhase() && previousChild == m.state.CurrentSubphase() && previousIndex == m.state.PhaseIndex {
+			m.animations.phaseAt = previousPhaseAt
 		}
 		// the bounded reply write precedes hooks that may terminate this renderer.
 		if msg.Reply != nil {
@@ -207,6 +217,7 @@ func (m *Model) advancePhasesOffset() {
 
 func (m Model) View() string {
 	resolver := resolver{
+		animations:   m.animations,
 		cfg:          m.cfg,
 		state:        m.state,
 		elapsed:      m.elapsed,
@@ -230,6 +241,7 @@ func (m Model) View() string {
 }
 
 type resolver struct {
+	animations   animationEvents
 	cfg          config.Config
 	state        progress.State
 	elapsed      float64
@@ -255,7 +267,9 @@ func (r resolver) Resolve(name string, width int) string {
 		}
 		start, end := animatedGradient(r.cfg)
 		pulse, shimmer, shift := animationState(r.cfg, r.elapsed)
-		return render.RenderBar(render.Options{
+		opts := render.Options{
+			Animation:       string(r.cfg.TintAnimation),
+			AnimationTime:   r.elapsed,
 			Width:           barWidth,
 			Percent:         clampPercent(r.state.DisplayValue, r.state.EffectiveTotal()),
 			Style:           render.Style(r.cfg.Style),
@@ -268,7 +282,9 @@ func (r resolver) Resolve(name string, width int) string {
 			ShimmerPhase:    shimmer,
 			GradientShift:   shift,
 			ASCII:           r.cfg.ASCII,
-		})
+		}
+		r.animations.apply(&opts, r.cfg, r.now)
+		return render.RenderBar(opts)
 	case "percent":
 		return fmt.Sprintf("%.0f%%", r.state.Percent())
 	case "phase":

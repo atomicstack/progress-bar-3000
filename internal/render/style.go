@@ -45,6 +45,16 @@ type Options struct {
 	Pulse           float64
 	ShimmerPhase    float64
 	GradientShift   float64
+	// Animation selects a colour effect; AnimationTime is elapsed wall-clock seconds.
+	Animation     string
+	AnimationTime float64
+	// RippleOrigin is the progress fraction at the event, not the current fill.
+	RippleAge      float64
+	RippleOrigin   float64
+	RippleStrength float64
+	// PhaseTransitionAge is measured in seconds since the phase changed.
+	PhaseTransition    bool
+	PhaseTransitionAge float64
 	// ASCII forces every glyph to a 7-bit character: fills become '=' with
 	// no partial cells, and non-ascii background glyphs become '.'. Colour
 	// handling is unaffected.

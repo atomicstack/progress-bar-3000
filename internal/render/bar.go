@@ -119,13 +119,14 @@ func colorizeBackground(opts Options, index int, bgRune rune) string {
 
 func animatedFillColor(opts Options, index int) RGB {
 	color := gradientColor(opts, index)
+	color = ambientColor(opts, index, color)
 	if opts.Pulse > 0 {
 		color = BlendTowardWhite(color, opts.Pulse)
 	}
 	if boost := shimmerBoost(opts, index); boost > 0 {
 		color = BlendTowardWhite(color, boost*0.45)
 	}
-	return color
+	return eventColor(opts, index, color)
 }
 
 // shimmerBoost returns a 0..1 intensity for a bright band sweeping across the
