@@ -143,21 +143,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.runCompletionHook()
 		return m, nil
 	case batchMsg:
-		previousPhase, previousChild, previousIndex := m.state.CurrentPhase(), m.state.CurrentSubphase(), m.state.PhaseIndex
-		previousPhaseAt := m.animations.phaseAt
-		reset := false
 		var commands []string
 		for _, evt := range msg.Events {
-			reset = reset || evt.Kind == input.KindReset
 			m.applyEvent(evt, msg.Now)
 			if command := m.takeCompletionCommand(); command != "" {
 				commands = append(commands, command)
 			}
-		}
-		// a batch renders only its final state. suppress waves for transient
-		// phase mappings that an explicit phase event restores before redraw.
-		if !reset && previousPhase == m.state.CurrentPhase() && previousChild == m.state.CurrentSubphase() && previousIndex == m.state.PhaseIndex {
-			m.animations.phaseAt = previousPhaseAt
 		}
 		// the bounded reply write precedes hooks that may terminate this renderer.
 		if msg.Reply != nil {
@@ -268,7 +259,8 @@ func (r resolver) Resolve(name string, width int) string {
 		start, end := animatedGradient(r.cfg)
 		pulse, shimmer, shift := animationState(r.cfg, r.elapsed)
 		opts := render.Options{
-			Animation:       string(r.cfg.TintAnimation),
+			Interference:    r.cfg.TintAnimation.Has(config.TintAnimationInterference),
+			EdgeGlow:        r.cfg.TintAnimation.Has(config.TintAnimationEdgeGlow),
 			AnimationTime:   r.elapsed,
 			Width:           barWidth,
 			Percent:         clampPercent(r.state.DisplayValue, r.state.EffectiveTotal()),
@@ -381,15 +373,16 @@ func animatedGradient(cfg config.Config) (render.RGB, render.RGB) {
 // elapsed seconds, so the visual pacing is independent of the configured FPS.
 func animationState(cfg config.Config, elapsed float64) (pulse float64, shimmerPhase float64, gradientShift float64) {
 	shimmerPhase = -1
-	switch cfg.TintAnimation {
-	case config.TintAnimationPulse:
+	if cfg.TintAnimation.Has(config.TintAnimationPulse) {
 		// 2.5s breath from 0 (natural colour) to 0.18 (brighter). Using
 		// (1 - cos) rather than sin keeps the minimum at exactly the
 		// original tint rather than leaving it permanently washed out.
 		pulse = 0.09 * (1 - math.Cos(2*math.Pi*elapsed/2.5))
-	case config.TintAnimationCycle:
+	}
+	if cfg.TintAnimation.Has(config.TintAnimationCycle) {
 		gradientShift = wrapUnit(elapsed / 4.0)
-	case config.TintAnimationShimmer:
+	}
+	if cfg.TintAnimation.Has(config.TintAnimationShimmer) {
 		shimmerPhase = wrapUnit(elapsed / 2.8)
 	}
 	return pulse, shimmerPhase, gradientShift

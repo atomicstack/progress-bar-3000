@@ -7,7 +7,7 @@ import (
 )
 
 func TestRootAcceptsAmbientAnimations(t *testing.T) {
-	for _, name := range []string{"aurora", "comet", "interference", "embers", "liquid", "edge-glow"} {
+	for _, name := range []string{"interference", "edge-glow"} {
 		t.Run(name, func(t *testing.T) {
 			called := false
 			cmd := NewRootCommand(func(cfg config.Config) error {
@@ -25,18 +25,5 @@ func TestRootAcceptsAmbientAnimations(t *testing.T) {
 				t.Fatal("renderer not called")
 			}
 		})
-	}
-}
-
-func TestRootAcceptsComposedEventAnimations(t *testing.T) {
-	cmd := NewRootCommand(func(cfg config.Config) error {
-		if !cfg.MilestoneRipple || !cfg.PhaseTransition {
-			t.Fatal("event animation flags were not passed to renderer")
-		}
-		return nil
-	})
-	cmd.SetArgs([]string{"--tint-animation", "cycle", "--milestone-ripple", "--phase-transition"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatal(err)
 	}
 }

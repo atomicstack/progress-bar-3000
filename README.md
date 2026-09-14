@@ -143,7 +143,7 @@ printf '20\n45\n80\n100\n' | ./progress-bar-3000 \
 
 ## tint animations
 
-set `--tint-animation` to `pulse`, `shimmer`, or `cycle`. customize the endpoints with `--gradient-start` and `--gradient-end`.
+set `--tint-animation` to one effect or a comma-separated combination. the released `pulse`, `shimmer` and `cycle` modes remain available; see [composable animations](#composable-animations) for the new layers. customize gradient endpoints with `--gradient-start` and `--gradient-end`.
 
 ![pulse, shimmer, and cycle animations in a pink-to-cyan rgb gradient](assets/demos/animations.png)
 
@@ -153,36 +153,36 @@ set `--tint-animation` to `pulse`, `shimmer`, or `cycle`. customize the endpoint
     --gradient-start '#ff70d2' --gradient-end '#00d8ff'
 ```
 
-### eight new animation reels
+### composable animations
 
-these additional effects are currently available in source builds after v0.4.0. [open the local animation gallery](assets/demos/animation-reel.html) after cloning this branch, or select a separate animated png below. every reel records the real cli with `--style granular --color-mode truecolor`; no palette conversion is applied.
+source builds after v0.4.0 add three effects that can run alone or together:
 
-| animation | option | reel |
+```sh
+--tint-animation interference,edge-glow,milestone-ripple
+```
+
+[open the local animation gallery](assets/demos/animation-reel.html) after cloning this branch, or select a separate animated png below. every reel records the actual cli with `--style granular --color-mode truecolor`, preserving full rgb colour.
+
+| selection | effect | reel |
 |---|---|---|
-| aurora | `--tint-animation aurora` | [drifting colour curtains](assets/demos/animation-aurora.png) |
-| comet | `--tint-animation comet` | [bright head and fading trail](assets/demos/animation-comet.png) |
-| interference | `--tint-animation interference` | [opposing waves of light](assets/demos/animation-interference.png) |
-| embers | `--tint-animation embers` | [warm sparks near the leading edge](assets/demos/animation-embers.png) |
-| liquid | `--tint-animation liquid` | [soft colour eddies](assets/demos/animation-liquid.png) |
-| edge glow | `--tint-animation edge-glow` | [breathing boundary halo](assets/demos/animation-edge-glow.png) |
-| milestone ripple | `--milestone-ripple` | [backward ripples on progress advances](assets/demos/animation-milestone-ripple.png) |
-| phase transition | `--phase-transition` | [colour waves on phase changes](assets/demos/animation-phase-transition.png) |
-
-combine one ambient animation with either or both event effects:
+| `interference` | continuous opposing waves of light through the fill | [interference](assets/demos/animation-interference.png) |
+| `edge-glow` | a breathing halo at the fill boundary | [edge glow](assets/demos/animation-edge-glow.png) |
+| `milestone-ripple` | a brief backward ripple on actual progress advances | [milestone ripple](assets/demos/animation-milestone-ripple.png) |
+| `interference,edge-glow,milestone-ripple` | all three layered together | [combined reel](assets/demos/animation-combined.png) |
 
 ```sh
 ./progress-bar-3000 --socket-path /tmp/pb3.sock --total 100 \
     --style granular --color-mode truecolor --width full \
     --gradient-start '#ff70d2' --gradient-end '#00d8ff' \
-    --tint-animation aurora --milestone-ripple --phase-transition \
+    --tint-animation interference,edge-glow,milestone-ripple \
     --format '%p %{percent}' --detail-format '%{phases}'
 ```
 
-initialize the phase plan first using `send`, then report actual work as usual. effects only change colour; they preserve every fill glyph, the displayed percentage, and the dim unfilled track. the six ambient effects keep moving while progress is held. with `--color-mode none`, all tint effects disappear.
+initialize phases first using `send`, then report real work as usual. any subset is supported. list order does not matter, duplicate names are ignored, and whitespace around names is trimmed. unknown names and empty entries such as `interference,,edge-glow` are rejected. omitting the flag or passing an empty value disables tint animations. the released `pulse`, `shimmer` and `cycle` options remain available individually or in combinations.
 
-milestone ripples start only on forward value/tick/increment updates that advance the filled fraction, last up to 1.4 seconds, and grow brighter with larger advances. duplicate/backward updates and denominator-only changes do not start a ripple. phase waves last 1.2 seconds and react to the visible parent or child changing, including combined json updates; hidden future-child changes and ignored selections do not trigger them. a batch that restores the same final visible phase does not animate its intermediate phase mappings.
+layers render in a fixed order: cycling gradient, interference, pulse, shimmer, edge glow, then milestone ripple. animations preserve filled glyphs and percentages. the three new effects leave the unfilled track unchanged; `--color-mode none` suppresses all colour effects.
 
-both event effects default off and can be combined with any ambient tint. only the newest event of each kind is retained, so rapid updates replace their previous effect. resetting or replacing the parent plan clears old effects. completion hooks retain their immediate behaviour: animations never postpone cleanup, so an auto-closing pane can disappear before its final effect finishes.
+milestone ripples last up to 1.4 seconds and scale in brightness with the size of the advance. only forward value/tick/increment updates that advance the filled fraction start a ripple; duplicates, backward updates, denominator-only changes and phase/subphase changes do not. only the newest ripple is retained, and resets or replacing the parent plan clear it. interference and edge glow continue during holds. completion hooks remain immediate and can close the pane before a final ripple finishes. there are no separate `--milestone-ripple` or `--phase-transition` flags.
 
 ## socket updates and custom rows
 
@@ -297,7 +297,7 @@ make build
 .venv/bin/python scripts/record-demos.py
 ```
 
-the recorder defaults to menlo on macos. on linux, pass `--font /path/to/monospace.ttf`. use `--only phases`, `subphases`, `styles`, `animations`, or `socket` to regenerate one original demo. use `--only animation-reel` for all eight new reels, or `--only animation-aurora` (and the other animation names) for an individual reel. recording dependencies are optional and are not needed to build or use the cli.
+the recorder defaults to menlo on macos. on linux, pass `--font /path/to/monospace.ttf`. use `--only phases`, `subphases`, `styles`, `animations`, or `socket` to regenerate one original demo. use `--only animation-reel` for the three individual reels and combined reel, or `--only animation-interference` (and the other animation names) for an individual reel. recording dependencies are optional and are not needed to build or use the cli.
 
 ## license
 
@@ -478,9 +478,7 @@ run `./progress-bar-3000 --help` for the short form. renderer flags are optional
 | `--color-mode MODE` | `auto` | `auto`, `truecolor`, `256`, `16`, `none`. `auto` reads the terminal's advertised profile via termenv. |
 | `--gradient-start HEX` | `#ffffff` | colour of the leftmost cell. six hex digits, `#` optional. |
 | `--gradient-end HEX` | `#0087ff` | colour of the rightmost cell. |
-| `--tint-animation KIND` | | `pulse`, `shimmer`, `cycle`, `aurora`, `comet`, `interference`, `embers`, `liquid`, or `edge-glow`. omit for no ambient tint animation. |
-| `--milestone-ripple` | `false` | a brief backward ripple on actual progress advances; composable with ambient tint. |
-| `--phase-transition` | `false` | a brief colour wave when the visible phase or subphase changes; composable with ambient tint. |
+| `--tint-animation LIST` | | comma-separated `pulse`, `shimmer`, `cycle`, `interference`, `edge-glow`, `milestone-ripple`; any combination, duplicates ignored, fixed rendering order. omit for no tint animation. |
 | `--ascii` | `false` | force ascii glyphs: the fill becomes `=` with no partial cells whatever `--style` says, and any non-ascii track glyph (the shade styles, or a non-ascii `--bg-char`) becomes `.`. colour is unaffected; add `--color-mode none` for a plain-text bar. |
 
 ### motion
@@ -795,14 +793,12 @@ ambient animations use wall-clock time and event effects use elapsed time since 
 | `pulse` | the whole fill brightens and dims on a 2.5 s cycle, returning exactly to the base colour at the trough. |
 | `shimmer` | a soft bright band sweeps left to right across both fill and track every 2.8 s, entering and leaving off the edges. |
 | `cycle` | the gradient slides along the bar on a 4 s loop, folded as start→end→start so there is no visible seam. |
-| `aurora` | broad, saturated colour curtains drift at different speeds, anchored to the configured gradient. |
-| `comet` | a bright head with a fading tail travels through the filled span every 3.2 s. |
 | `interference` | opposing waves create moving intersections of light. |
-| `embers` | deterministic warm sparks brighten and fade, concentrated near the fill boundary. |
-| `liquid` | smooth colour currents bend into slow eddies. |
 | `edge-glow` | a localized halo expands and contracts at the fill boundary every 2.8 s. |
 
-see [eight new animation reels](#eight-new-animation-reels) for granular demos and the independent `--milestone-ripple` / `--phase-transition` overlays.
+| `milestone-ripple` | a backward ripple after an actual progress advance; fades out within 1.4 s. |
+
+use a comma-separated list to layer effects. see [composable animations](#composable-animations) for granular demos and the combined reel.
 
 ## socket mode
 

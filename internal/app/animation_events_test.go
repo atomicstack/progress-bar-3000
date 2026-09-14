@@ -25,22 +25,24 @@ func animationUpdate(m Model, msg tea.Msg) Model {
 
 func TestEventAnimationsReactToActualChanges(t *testing.T) {
 	for _, tc := range []struct {
-		name, line          string
-		ripple, phase, want bool
+		name, line   string
+		ripple, want bool
 	}{
-		{"advance", "@value 60", true, false, true},
-		{"duplicate", "@value 40", true, false, false},
-		{"backward", "@value 20", true, false, false},
-		{"denominator", "@set-total 80", true, false, false},
-		{"phase change", "@phase-name test", false, true, true},
-		{"same phase", "@phase-name build", false, true, false},
-		{"unknown phase", "@phase-name missing", false, true, false},
-		{"label only", "@label waiting", true, true, false},
+		{"advance", "@value 60", true, true},
+		{"disabled", "@value 60", false, false},
+		{"duplicate", "@value 40", true, false},
+		{"backward", "@value 20", true, false},
+		{"denominator", "@set-total 80", true, false},
+		{"phase change", "@phase-name test", true, false},
+		{"same phase", "@phase-name build", true, false},
+		{"unknown phase", "@phase-name missing", true, false},
+		{"label only", "@label waiting", true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := animationModel()
-			m.cfg.MilestoneRipple = tc.ripple
-			m.cfg.PhaseTransition = tc.phase
+			if tc.ripple {
+				m.cfg.TintAnimation = "milestone-ripple"
+			}
 			at := time.Unix(100, 0)
 			evt, err := input.ParseLine(config.InputModeAuto, tc.line)
 			if err != nil {
@@ -49,8 +51,7 @@ func TestEventAnimationsReactToActualChanges(t *testing.T) {
 			m = animationUpdate(m, eventMsg{Event: evt, Now: at})
 			m = animationUpdate(m, frameMsg{Now: at.Add(300 * time.Millisecond)})
 			baseline := m
-			baseline.cfg.MilestoneRipple = false
-			baseline.cfg.PhaseTransition = false
+			baseline.cfg.TintAnimation = ""
 			got, want := m.View(), baseline.View()
 			if (got != want) != tc.want {
 				t.Fatalf("effect visible=%v, want %v", got != want, tc.want)
@@ -60,8 +61,7 @@ func TestEventAnimationsReactToActualChanges(t *testing.T) {
 			}
 			m = animationUpdate(m, frameMsg{Now: at.Add(3 * time.Second)})
 			baseline = m
-			baseline.cfg.MilestoneRipple = false
-			baseline.cfg.PhaseTransition = false
+			baseline.cfg.TintAnimation = ""
 			if m.View() != baseline.View() {
 				t.Fatal("event animation did not expire")
 			}
@@ -70,7 +70,7 @@ func TestEventAnimationsReactToActualChanges(t *testing.T) {
 }
 
 func TestAmbientAnimationsReachRenderer(t *testing.T) {
-	for _, name := range []string{"aurora", "comet", "interference", "embers", "liquid", "edge-glow"} {
+	for _, name := range []string{"interference", "edge-glow"} {
 		t.Run(name, func(t *testing.T) {
 			m := animationModel()
 			m.cfg.TintAnimation = config.TintAnimation(name)
@@ -91,7 +91,7 @@ func TestAmbientAnimationsReachRenderer(t *testing.T) {
 func TestEventAnimationLifecycle(t *testing.T) {
 	at := time.Unix(100, 0)
 	m := animationModel()
-	m.cfg.MilestoneRipple, m.cfg.PhaseTransition = true, true
+	m.cfg.TintAnimation = "milestone-ripple"
 	apply := func(line string, when time.Time) {
 		t.Helper()
 		evt, err := input.ParseLine(config.InputModeAuto, line)
@@ -101,12 +101,12 @@ func TestEventAnimationLifecycle(t *testing.T) {
 		m = animationUpdate(m, eventMsg{Event: evt, Now: when})
 	}
 	apply(`{"type":"value","value":60,"phase":"test"}`, at)
-	if m.animations.rippleAt != at || m.animations.phaseAt != at {
-		t.Fatal("combined update did not trigger both effects")
+	if m.animations.rippleAt != at {
+		t.Fatal("combined update did not trigger ripple")
 	}
 	firstStrength := m.animations.rippleStrength
 	apply(`{"type":"value","value":60,"phase":"test"}`, at.Add(time.Second))
-	if m.animations.rippleAt != at || m.animations.phaseAt != at {
+	if m.animations.rippleAt != at {
 		t.Fatal("duplicate update restarted effects")
 	}
 	apply(`{"type":"value","value":61,"phase":"test"}`, at.Add(2*time.Second))
@@ -119,45 +119,10 @@ func TestEventAnimationLifecycle(t *testing.T) {
 	}
 }
 
-func TestPhaseAnimationTracksOnlyVisibleSubphaseChanges(t *testing.T) {
-	at := time.Unix(100, 0)
-	m := animationModel()
-	m.cfg.PhaseTransition = true
-	apply := func(line string, when time.Time) {
-		t.Helper()
-		evt, err := input.ParseLine(config.InputModeAuto, line)
-		if err != nil {
-			t.Fatal(err)
-		}
-		m = animationUpdate(m, eventMsg{Event: evt, Now: when})
-	}
-	apply(`{"type":"set_subphases","phase":"test","subphases":["unit","integration"]}`, at)
-	if !m.animations.phaseAt.IsZero() {
-		t.Fatal("future parent plan triggered visible phase wave")
-	}
-	apply("@set-subphases compile,link", at.Add(time.Second))
-	if m.animations.phaseAt != at.Add(time.Second) {
-		t.Fatal("new visible child did not trigger wave")
-	}
-	apply("@subphase-name link", at.Add(2*time.Second))
-	if m.animations.phaseAt != at.Add(2*time.Second) {
-		t.Fatal("child selection did not trigger wave")
-	}
-	apply("@subphase-name missing", at.Add(3*time.Second))
-	apply(`{"type":"subphase","phase":"test","name":"integration"}`, at.Add(4*time.Second))
-	if m.animations.phaseAt != at.Add(2*time.Second) {
-		t.Fatal("ignored or hidden child restarted wave")
-	}
-	apply("@set-phases build,test", at.Add(5*time.Second))
-	if m.animations != (animationEvents{}) {
-		t.Fatal("new plan retained old animation state")
-	}
-}
-
 func TestBatchAnimationsMatchRawEventsAndDoNotDelayCompletion(t *testing.T) {
 	at := time.Unix(100, 0)
 	m := animationModel()
-	m.cfg.MilestoneRipple, m.cfg.PhaseTransition = true, true
+	m.cfg.TintAnimation = "milestone-ripple"
 	m.cfg.OnComplete = "printf done"
 	var output strings.Builder
 	m.hooks.output = &output
@@ -180,7 +145,7 @@ func TestBatchAnimationsMatchRawEventsAndDoNotDelayCompletion(t *testing.T) {
 		ack = true
 		return nil
 	}})
-	if !ack || m.animations.rippleAt != at || m.animations.phaseAt != at {
+	if !ack || m.animations.rippleAt != at {
 		t.Fatal("batch effects or acknowledgement missing")
 	}
 	if err := m.hooks.wait(); err != nil {
@@ -191,18 +156,5 @@ func TestBatchAnimationsMatchRawEventsAndDoNotDelayCompletion(t *testing.T) {
 	}
 	if m.state.Value != 100 {
 		t.Fatal("animation changed final progress")
-	}
-}
-
-func TestBatchDoesNotAnimateInvisiblePhaseTransitions(t *testing.T) {
-	m := animationModel()
-	m.cfg.PhaseTransition = true
-	at := time.Unix(100, 0)
-	// value mapping briefly selects test; the batch explicitly restores build
-	// before any frame can render it. the visible phase never changed.
-	events := []input.Event{{Kind: input.KindValue, Value: 45}, {Kind: input.KindPhase, PhaseName: "build"}}
-	m = animationUpdate(m, batchMsg{Events: events, Now: at})
-	if !m.animations.phaseAt.IsZero() {
-		t.Fatal("batch animated a phase the user never saw")
 	}
 }

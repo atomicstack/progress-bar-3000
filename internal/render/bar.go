@@ -126,6 +126,7 @@ func animatedFillColor(opts Options, index int) RGB {
 	if boost := shimmerBoost(opts, index); boost > 0 {
 		color = BlendTowardWhite(color, boost*0.45)
 	}
+	color = edgeGlowColor(opts, index, color)
 	return eventColor(opts, index, color)
 }
 

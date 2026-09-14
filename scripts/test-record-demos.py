@@ -17,7 +17,7 @@ class AnimationReelTests(unittest.TestCase):
 
     def test_reels_use_explicit_granular_truecolor(self):
         demos = self.demos()
-        self.assertEqual(len(demos), 8)
+        self.assertEqual(len(demos), 4)
         for name, (_, _, terminals, _, duration) in demos.items():
             with self.subTest(name=name):
                 self.assertTrue(name.startswith('animation-'))
@@ -29,7 +29,7 @@ class AnimationReelTests(unittest.TestCase):
 
     def test_ambient_motion_holds_before_filling(self):
         for name, (_, _, _, update, duration) in self.demos().items():
-            if name in ('animation-milestone-ripple', 'animation-phase-transition'):
+            if name in ('animation-milestone-ripple', 'animation-combined'):
                 continue
             with self.subTest(name=name):
                 self.assertEqual(update(0, 0, duration), '@value 68.00\n')
@@ -45,19 +45,18 @@ class AnimationReelTests(unittest.TestCase):
                          [f'@value {value}\n' for value in (10, 25, 50, 75, 100)])
         self.assertTrue(all(b[0] - a[0] >= 1.5 for a, b in zip(events, events[1:])))
 
-    def test_phase_transitions_keep_value_steady(self):
-        _, _, _, update, duration = self.demos()['animation-phase-transition']
+    def test_combined_reel_layers_and_milestones(self):
+        _, _, terminals, update, duration = self.demos()['animation-combined']
+        flags = terminals[0][1]
+        self.assertEqual(flags[flags.index('--tint-animation') + 1],
+                         'interference,edge-glow,milestone-ripple')
         events = [update(frame / recorder.FPS, 0, duration)
                   for frame in range(round(duration * recorder.FPS))]
-        events = [payload for payload in events if payload]
-        self.assertTrue(all(event.startswith('{') and event.count('\n') == 1 for event in events),
-                        'phase updates must be atomic json events')
-        self.assertEqual([recorder.json.loads(event) for event in events],
-                         [{'type': 'value', 'value': 68, 'phase': phase}
-                          for phase in ('fetch', 'build', 'test', 'package')])
+        self.assertEqual([event for event in events if event],
+                         [f'@value {value}\n' for value in (35, 50, 68, 84, 100)])
 
-    def test_aurora_poster_shows_filled_colour(self):
-        path = recorder.ROOT / 'assets/demos/animation-aurora.png'
+    def test_interference_poster_shows_filled_colour(self):
+        path = recorder.ROOT / 'assets/demos/animation-interference.png'
         with recorder.Image.open(path) as image:
             pixel = image.getpixel((recorder.PAD + 10 * recorder.CELL_W, 118))
             self.assertGreater(max(pixel), 80, 'poster captured the empty track before fill settled')

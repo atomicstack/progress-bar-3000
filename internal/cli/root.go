@@ -43,6 +43,10 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var err error
+			cfg.TintAnimation, err = config.ParseTintAnimations(string(cfg.TintAnimation))
+			if err != nil {
+				return err
+			}
 			cfg.Width, cfg.WidthFull, err = config.ParseWidth(width)
 			if err != nil {
 				return err
@@ -85,9 +89,7 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.ClearOnExit, "clear-on-exit", cfg.ClearOnExit, "erase the bar after completion instead of leaving it on screen")
 	cmd.Flags().IntVar(&cfg.FPS, "fps", cfg.FPS, "frames per second")
 	cmd.Flags().Float64Var(&cfg.Lerp, "lerp", cfg.Lerp, "lerp factor")
-	cmd.Flags().StringVar((*string)(&cfg.TintAnimation), "tint-animation", string(cfg.TintAnimation), "tint animation: pulse, shimmer, cycle, aurora, comet, interference, embers, liquid, or edge-glow (omit for none)")
-	cmd.Flags().BoolVar(&cfg.MilestoneRipple, "milestone-ripple", false, "send a brief backward ripple on actual progress advances")
-	cmd.Flags().BoolVar(&cfg.PhaseTransition, "phase-transition", false, "send a brief colour wave when the active phase or subphase changes")
+	cmd.Flags().StringVar((*string)(&cfg.TintAnimation), "tint-animation", string(cfg.TintAnimation), "comma-separated animations: pulse, shimmer, cycle, interference, edge-glow, milestone-ripple (omit for none)")
 	cmd.Flags().BoolVar(&cfg.ASCII, "ascii", cfg.ASCII, "use ascii characters")
 	cmd.AddCommand(newSendCommand(), newTmuxStartCommand())
 

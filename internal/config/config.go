@@ -55,15 +55,12 @@ const (
 type TintAnimation string
 
 const (
-	TintAnimationPulse        TintAnimation = "pulse"
-	TintAnimationShimmer      TintAnimation = "shimmer"
-	TintAnimationCycle        TintAnimation = "cycle"
-	TintAnimationAurora       TintAnimation = "aurora"
-	TintAnimationComet        TintAnimation = "comet"
-	TintAnimationInterference TintAnimation = "interference"
-	TintAnimationEmbers       TintAnimation = "embers"
-	TintAnimationLiquid       TintAnimation = "liquid"
-	TintAnimationEdgeGlow     TintAnimation = "edge-glow"
+	TintAnimationPulse           TintAnimation = "pulse"
+	TintAnimationShimmer         TintAnimation = "shimmer"
+	TintAnimationCycle           TintAnimation = "cycle"
+	TintAnimationInterference    TintAnimation = "interference"
+	TintAnimationEdgeGlow        TintAnimation = "edge-glow"
+	TintAnimationMilestoneRipple TintAnimation = "milestone-ripple"
 )
 
 // DetailKey identifies a single detail row that can be rendered below the bar.
@@ -145,8 +142,6 @@ type Config struct {
 	FPS             int
 	Lerp            float64
 	TintAnimation   TintAnimation
-	MilestoneRipple bool
-	PhaseTransition bool
 	ASCII           bool
 }
 
@@ -175,10 +170,8 @@ func (c Config) Validate() error {
 		return fmt.Errorf("--color-mode must be one of auto, truecolor, 256, 16, none")
 	}
 
-	switch c.TintAnimation {
-	case "", TintAnimationPulse, TintAnimationShimmer, TintAnimationCycle, TintAnimationAurora, TintAnimationComet, TintAnimationInterference, TintAnimationEmbers, TintAnimationLiquid, TintAnimationEdgeGlow:
-	default:
-		return fmt.Errorf("--tint-animation must be one of pulse, shimmer, cycle, aurora, comet, interference, embers, liquid, or edge-glow")
+	if _, err := ParseTintAnimations(string(c.TintAnimation)); err != nil {
+		return err
 	}
 
 	if _, err := ParseDetail(c.Detail); err != nil {

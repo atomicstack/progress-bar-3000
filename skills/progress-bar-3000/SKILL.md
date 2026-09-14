@@ -144,11 +144,11 @@ for a bootstrap-created pane, send a json `reset` with this `phases` array and t
 
 ## optional animation effects
 
-source builds after v0.4.0 add ambient `--tint-animation aurora`, `comet`, `interference`, `embers`, `liquid`, and `edge-glow` alongside `pulse`, `shimmer`, and `cycle`. renderer flags `--milestone-ripple` and `--phase-transition` add independent event effects; combine either or both with one ambient tint. these renderer flags are not accepted by `send` or `tmux-start`; the standard bootstrap retains its cycle default.
+source builds after v0.4.0 accept comma-separated renderer selections such as `--tint-animation interference,edge-glow,milestone-ripple`. any subset works; order does not matter, duplicates are ignored, and whitespace around names is trimmed. unknown names and empty list entries fail validation. omit the flag for no tint animations. the released single-value `pulse`, `shimmer` and `cycle` modes remain compatible and can also be combined.
 
-milestone ripples react only to forward value/tick/increment updates that advance the filled fraction and last up to 1.4 seconds. phase waves react to visible parent/subphase changes and last 1.2 seconds. unchanged, ignored or hidden child selections do not start a wave. a batch's intermediate phase mappings do not trigger a wave if the final visible phase is unchanged. both effects default off, retain only their newest event, and reset with the parent plan or `@reset`. animations never change actual progress or delay completion hooks.
+interference continuously moves light through the fill; edge glow breathes at its boundary. milestone ripple runs only after a forward value/tick/increment update advances the filled fraction, fading within 1.4 seconds. phase/subphase changes, duplicate values and denominator-only changes do not trigger ripples. the newest ripple replaces the previous one; resets clear it. effects never change progress or delay completion hooks. there are no separate event-animation flags.
 
-the repository's `assets/demos/animation-reel.html` gallery contains individual truecolour granular recordings of all eight effects. honest progress rules still apply: continuous animation indicates a live renderer, not proof that task work is advancing.
+rendering order is fixed: cycle, interference, pulse, shimmer, edge glow, milestone ripple. `assets/demos/animation-reel.html` contains three individual truecolour granular demos and a combined reel. these are renderer flags; `send` and `tmux-start` retain their existing interfaces, and bootstrap still selects cycle. continuous animation indicates a live renderer, not proof that task work is advancing.
 
 ## completion and cleanup
 

@@ -2,12 +2,13 @@ package render
 
 import (
 	"fmt"
+	"progress-bar-3000/internal/config"
 	"strings"
 	"testing"
 	"unicode/utf8"
 )
 
-var ambientAnimations = []string{"aurora", "comet", "interference", "embers", "liquid", "edge-glow"}
+var ambientAnimations = []string{"interference", "edge-glow", "interference,edge-glow"}
 
 func animationOptions() Options {
 	return Options{Width: 80, Percent: 0.675, Style: StyleGradientGranular,
@@ -23,7 +24,7 @@ func TestAmbientAnimationsMoveDeterministically(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			opts := animationOptions()
 			baseline := RenderBar(opts)
-			opts.Animation = name
+			setAnimation(&opts, name)
 			opts.AnimationTime = 0.37
 			first := RenderBar(opts)
 			opts.AnimationTime = 1.19
@@ -60,9 +61,9 @@ func TestAnimationsPreserveFillAndUnfilledTrack(t *testing.T) {
 							opts.Style, opts.Width, opts.Percent, opts.ASCII, opts.Profile = style, width, percent, ascii, profile
 							baseline := RenderBar(opts)
 							for _, animation := range ambientAnimations {
-								opts.Animation, opts.AnimationTime = animation, 0.37
+								setAnimation(&opts, animation)
+								opts.AnimationTime = 0.37
 								opts.RippleOrigin, opts.RippleStrength, opts.RippleAge = percent, 0.8, 0.2
-								opts.PhaseTransition, opts.PhaseTransitionAge = true, 0.2
 								got := RenderBar(opts)
 								if StripANSI(got) != StripANSI(baseline) || utf8.RuneCountInString(StripANSI(got)) != width {
 									t.Fatalf("%s changes fill or width: %q vs %q", animation, StripANSI(got), StripANSI(baseline))
@@ -97,7 +98,8 @@ func TestEventAnimationsComposeAndExpire(t *testing.T) {
 	for _, ambient := range append([]string{""}, ambientAnimations...) {
 		t.Run(ambient, func(t *testing.T) {
 			opts := animationOptions()
-			opts.Animation, opts.AnimationTime = ambient, 0.37
+			setAnimation(&opts, ambient)
+			opts.AnimationTime = 0.37
 			baseline := RenderBar(opts)
 			opts.RippleOrigin, opts.RippleStrength, opts.RippleAge = opts.Percent, 0.8, 0.3
 			ripple := RenderBar(opts)
@@ -108,22 +110,11 @@ func TestEventAnimationsComposeAndExpire(t *testing.T) {
 			if RenderBar(opts) == ripple {
 				t.Fatal("ripple strength must affect intensity")
 			}
-			opts.RippleStrength = 0.8
-			opts.PhaseTransition, opts.PhaseTransitionAge = true, 0.35
-			if RenderBar(opts) == ripple {
-				t.Fatal("phase wave must compose with ripple and ambient")
-			}
-			opts.RippleStrength = 0
-			phase := RenderBar(opts)
-			if phase == baseline || phase == ripple {
-				t.Fatal("phase wave must have a distinct visible effect")
-			}
 			opts.RippleStrength, opts.RippleAge = 0.8, MilestoneRippleDuration
-			opts.PhaseTransitionAge = PhaseTransitionDuration
 			if RenderBar(opts) != baseline {
 				t.Fatal("expired events must restore exact ambient output")
 			}
-			opts.RippleAge, opts.PhaseTransitionAge = -1, -1
+			opts.RippleAge = -1
 			if RenderBar(opts) != baseline {
 				t.Fatal("events must not render before their start")
 			}
@@ -161,7 +152,8 @@ func TestAnimationsRetainConfiguredGradientInfluence(t *testing.T) {
 	for _, name := range ambientAnimations {
 		t.Run(name, func(t *testing.T) {
 			opts := animationOptions()
-			opts.Animation, opts.AnimationTime = name, 0.37
+			setAnimation(&opts, name)
+			opts.AnimationTime = 0.37
 			first := RenderBar(opts)
 			opts.GradientStart, opts.GradientEnd = RGB{R: 220, G: 30, B: 20}, RGB{R: 250, G: 150, B: 15}
 			if first == RenderBar(opts) {
@@ -169,4 +161,10 @@ func TestAnimationsRetainConfiguredGradientInfluence(t *testing.T) {
 			}
 		})
 	}
+}
+
+func setAnimation(opts *Options, name string) {
+	selection := config.TintAnimation(name)
+	opts.Interference = selection.Has(config.TintAnimationInterference)
+	opts.EdgeGlow = selection.Has(config.TintAnimationEdgeGlow)
 }

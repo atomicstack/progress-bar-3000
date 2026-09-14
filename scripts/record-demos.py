@@ -241,24 +241,20 @@ def milestone_reel(elapsed, _, duration):
     return f'@value {value}\n'
 
 
-def phase_reel(elapsed, _, duration):
+def combined_reel(elapsed, _, duration):
     frame = round(elapsed * FPS)
-    interval = round(duration * FPS / 4)
+    interval = round(duration * FPS / 5)
     if frame % interval:
         return ''
-    phase = ('fetch', 'build', 'test', 'package')[min(3, frame // interval)]
-    return json.dumps({'type': 'value', 'value': 68, 'phase': phase}) + '\n'
+    value = (35, 50, 68, 84, 100)[min(4, frame // interval)]
+    return f'@value {value}\n'
 
 
 def animation_demos():
     common = ['--style', 'granular', '--color-mode', 'truecolor',
               '--gradient-start', '#ff70d2', '--gradient-end', '#00d8ff']
     descriptions = {
-        'aurora': 'soft colour bands drift through the fill',
-        'comet': 'a bright head travels with a fading tail',
         'interference': 'overlapping colour waves move through each other',
-        'embers': 'small warm sparks flicker through the fill',
-        'liquid': 'slow colour currents flow through the fill',
         'edge-glow': 'a breathing highlight follows the leading edge',
     }
     demos = {
@@ -269,11 +265,11 @@ def animation_demos():
     }
     demos['animation-milestone-ripple'] = (
         'milestone ripple', 'discrete updates cross 25%, 50%, 75%, and 100% · two-second holds',
-        [('', [*common, '--milestone-ripple'], 1)], milestone_reel, 10)
-    demos['animation-phase-transition'] = (
-        'phase transition', 'actual phase changes at a held 68% · watch the highlighted phase',
-        [('', [*common, '--phase-transition', '--detail-format', '%{phases}'], 2)],
-        phase_reel, 10)
+        [('', [*common, '--tint-animation', 'milestone-ripple'], 1)], milestone_reel, 10)
+    demos['animation-combined'] = (
+        'three layers, one bar', 'interference + edge glow + milestone ripple · real updates every two seconds',
+        [('', [*common, '--tint-animation', 'interference,edge-glow,milestone-ripple'], 1)],
+        combined_reel, 10)
     return demos
 
 

@@ -15,15 +15,14 @@ type animationEvents struct {
 	rippleAt       time.Time
 	rippleOrigin   float64
 	rippleStrength float64
-	phaseAt        time.Time
 }
 
-func (m *Model) recordAnimationEvent(evt input.Event, at time.Time, previousValue float64, previousPhase, previousChild string, previousIndex int) {
+func (m *Model) recordAnimationEvent(evt input.Event, at time.Time, previousValue float64) {
 	if evt.Kind == input.KindReset {
 		m.animations = animationEvents{}
 		return
 	}
-	if m.cfg.MilestoneRipple && (evt.Kind == input.KindValue || evt.Kind == input.KindTick || evt.Kind == input.KindIncrement) {
+	if m.cfg.TintAnimation.Has(config.TintAnimationMilestoneRipple) && (evt.Kind == input.KindValue || evt.Kind == input.KindTick || evt.Kind == input.KindIncrement) {
 		total := m.state.EffectiveTotal()
 		before, after := clampPercent(previousValue, total), clampPercent(m.state.Value, total)
 		if total > 0 && after > before {
@@ -32,26 +31,16 @@ func (m *Model) recordAnimationEvent(evt input.Event, at time.Time, previousValu
 			m.animations.rippleStrength = math.Min(1, 0.3+2*(after-before))
 		}
 	}
-	if m.cfg.PhaseTransition && previousPhase != "" && m.state.CurrentPhase() != "" &&
-		(previousIndex != m.state.PhaseIndex || previousPhase != m.state.CurrentPhase() || previousChild != m.state.CurrentSubphase()) {
-		m.animations.phaseAt = at
-	}
+
 }
 
 func (a animationEvents) apply(opts *render.Options, cfg config.Config, at time.Time) {
-	if cfg.MilestoneRipple && !a.rippleAt.IsZero() {
+	if cfg.TintAnimation.Has(config.TintAnimationMilestoneRipple) && !a.rippleAt.IsZero() {
 		age := at.Sub(a.rippleAt).Seconds()
 		if age >= 0 && age < render.MilestoneRippleDuration {
 			opts.RippleAge = age
 			opts.RippleOrigin = a.rippleOrigin
 			opts.RippleStrength = a.rippleStrength
-		}
-	}
-	if cfg.PhaseTransition && !a.phaseAt.IsZero() {
-		age := at.Sub(a.phaseAt).Seconds()
-		if age >= 0 && age < render.PhaseTransitionDuration {
-			opts.PhaseTransition = true
-			opts.PhaseTransitionAge = age
 		}
 	}
 }
