@@ -47,10 +47,16 @@ func (h *completionHooks) wait() error {
 }
 
 func (m *Model) runCompletionHook() {
+	if command := m.takeCompletionCommand(); command != "" {
+		m.hooks.start(command)
+	}
+}
+
+func (m *Model) takeCompletionCommand() string {
 	total := m.state.EffectiveTotal()
 	if m.completionFired || strings.TrimSpace(m.cfg.OnComplete) == "" || total <= 0 || !(m.state.Value >= float64(total)) {
-		return
+		return ""
 	}
 	m.completionFired = true
-	m.hooks.start(m.cfg.OnComplete)
+	return m.cfg.OnComplete
 }

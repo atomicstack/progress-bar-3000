@@ -138,20 +138,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.termWidth = msg.Width
 		return m, nil
 	case eventMsg:
-		if msg.Event.Kind == input.KindOnComplete {
-			m.cfg.OnComplete = msg.Event.Command
-			m.runCompletionHook()
-			return m, nil
-		}
-		if msg.Event.Kind == input.KindReset {
-			m.completionFired = false
-		}
-		previousDisplay := m.state.DisplayValue
-		m.state.Apply(msg.Event, msg.Now)
-		if affectsProgressValue(msg.Event.Kind) && msg.Event.Kind != input.KindReset {
-			m.state.DisplayValue = previousDisplay
-		}
+		m.applyEvent(msg.Event, msg.Now)
 		m.runCompletionHook()
+		return m, nil
+	case batchMsg:
+		var commands []string
+		for _, evt := range msg.Events {
+			m.applyEvent(evt, msg.Now)
+			if command := m.takeCompletionCommand(); command != "" {
+				commands = append(commands, command)
+			}
+		}
+		// the bounded reply write precedes hooks that may terminate this renderer.
+		if msg.Reply != nil {
+			_ = msg.Reply(nil)
+		}
+		for _, command := range commands {
+			m.hooks.start(command)
+		}
+		if msg.Done != nil {
+			close(msg.Done)
+		}
 		return m, nil
 	case frameMsg:
 		m.frame++
@@ -207,12 +214,12 @@ func (m Model) View() string {
 		termWidth:    m.termWidth,
 		phasesOffset: int(math.Round(m.phasesOffset)),
 	}
-	rows := []string{m.template.Render(resolver)}
+	rows := []string{renderTemplate(m.template, resolver)}
 	for _, k := range m.detail {
 		rows = append(rows, detailRenderers[k](m.state))
 	}
 	for _, t := range m.detailFormats {
-		rows = append(rows, t.Render(resolver))
+		rows = append(rows, renderTemplate(t, resolver))
 	}
 	// No trailing newline: a live frame must occupy exactly the rows it
 	// prints. Bubble Tea drops lines from the TOP when a frame is taller than

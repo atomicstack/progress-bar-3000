@@ -54,17 +54,14 @@ func Run(cfg config.Config, in io.Reader, out, stderr io.Writer) (runErr error) 
 	defer cancel()
 
 	go func() {
-		err := source.Run(ctx, func(line string) error {
-			evt, err := input.ParseLine(cfg.InputMode, line)
-			if err != nil {
-				return err
-			}
-			if evt.Kind == "" {
-				return nil
-			}
-			program.Send(eventMsg{Event: evt, Now: now()})
-			return nil
-		})
+		var err error
+		if requests, ok := source.(input.RequestSource); ok {
+			err = requests.RunRequests(ctx, func(request input.Request) error { return applyRequest(ctx, cfg.InputMode, request, program.Send) })
+		} else {
+			err = source.Run(ctx, func(line string) error {
+				return applyRequest(ctx, cfg.InputMode, input.Request{Lines: []string{line}}, program.Send)
+			})
+		}
 		if err != nil && !errors.Is(err, context.Canceled) {
 			program.Send(errMsg{Err: err})
 			return

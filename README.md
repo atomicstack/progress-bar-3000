@@ -171,22 +171,16 @@ printf 'socket: %s/progress.sock\n' "$sock_dir"
 rmdir "$sock_dir"
 ```
 
-from another terminal, pass the printed socket path to this sender (requires python 3):
+from another terminal, use the printed socket path with the built-in sender (available in source builds after v0.3.0):
 
 ```sh
-python3 - /tmp/pb3.XXXXXX/progress.sock <<'PYTHON'
-import socket, sys
-with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-    client.settimeout(2)
-    client.connect(sys.argv[1])
-    client.sendall(
-        b"@set-phases fetch,build,test,package\n@set-total 100\n"
-        b"@value 40\n@phase-name build\n"
-        b"@label compiling modules\n@meta objects=960\n"
-    )
-    client.shutdown(socket.SHUT_WR)
-PYTHON
+./progress-bar-3000 send --socket-path /tmp/pb3.XXXXXX/progress.sock \
+    '@set-phases fetch,build,test,package' '@set-total 100' \
+    '@value 40' '@phase-name build' \
+    '@label compiling modules' '@meta objects=960'
 ```
+
+replace the example path with the actual printed path. success is silent and exits zero only after the renderer applies the batch. missing sockets, rejected batches and missing acknowledgements exit nonzero.
 
 send `@value` or `@tick` after work succeeds. send `@set-phases` only when initializing or replacing the plan: it resets progress. socket mode stays alive across client disconnects; press `ctrl-c` in the renderer terminal when finished.
 
@@ -213,11 +207,10 @@ you can set, replace, or clear the hook at runtime through either input transpor
 use the pane id returned by your own `tmux split-window -P -F '#{pane_id}'`, never a hardcoded example id or the currently active pane. after creating and initializing the renderer, register its cleanup through the socket:
 
 ```sh
-# pb_send is defined in the socket-mode reference below.
 # pane is the exact id captured when you created the progress pane.
-printf '@on-complete tmux kill-pane -t %s\n' "$pane" | pb_send "$sock"
+./progress-bar-3000 send --socket-path "$sock" "@on-complete tmux kill-pane -t $pane"
 # after all work and verification succeed:
-printf '@value %s\n' "$total" | pb_send "$sock"
+./progress-bar-3000 send --socket-path "$sock" "@value $total"
 ```
 
 the pane closes automatically. the [agent skill](skills/progress-bar-3000/SKILL.md#running-inside-tmux) contains the complete setup. the caller remains responsible for other resources and any socket files left behind by abruptly killing a pane. put any cleanup commands before `tmux kill-pane` in a combined hook, since removing the pane can terminate its processes.
@@ -239,6 +232,16 @@ the pane closes automatically. the [agent skill](skills/progress-bar-3000/SKILL.
 - `--clear-on-exit` removes the display; otherwise the final bar stays visible.
 
 ## agent integration
+
+source builds after v0.3.0 include one-call startup and acknowledged updates:
+
+```sh
+./progress-bar-3000 tmux-start --phases build,test,review --total 3 --width full --auto-close
+# use the actual socket returned above; after the build succeeds:
+./progress-bar-3000 send --socket-path /tmp/pb-123456/p.sock '@value 1' '@phase-name test'
+```
+
+see [one-call tmux bootstrap](#one-call-tmux-bootstrap) for defaults and returned handles. these helpers are not in the v0.3.0 prebuilt downloads yet.
 
 [the bundled skill](skills/progress-bar-3000/SKILL.md) describes socket control, phase updates, and a dedicated two-row tmux pane. the repository also contains a claude code plugin manifest. release archives include the ready-to-run binary; source checkouts and source-based plugin installs need `make build` before using the skill.
 
@@ -400,11 +403,11 @@ printf '%s\n' a b c | ./progress-bar-3000 --total 3 --clear-on-exit
 ### socket input
 
 see [socket updates and custom rows](#socket-updates-and-custom-rows) for a
-complete example with a private socket directory and a python sender.
+complete example with a private socket directory and the acknowledged sender.
 
 ## flags
 
-run `./progress-bar-3000 --help` for the short form. every flag is optional.
+run `./progress-bar-3000 --help` for the short form. renderer flags are optional; helper subcommands have their own flags listed below.
 
 ### progress bootstrap
 
@@ -428,7 +431,7 @@ run `./progress-bar-3000 --help` for the short form. every flag is optional.
 | flag | default | description |
 |---|---|---|
 | `--format TEMPLATE` | `%p %{percent} %{phase}` | template for the first row. see [Format templates](#format-templates). |
-| `--width N` | `0` (automatic) | bar width in columns. automatic uses 90% of the terminal width, rounded down with a minimum of one column, and follows resizing. a positive value stays fixed. template width prefixes take precedence. |
+| `--width N` / `--width full` | `0` (automatic) | automatic uses 90% of terminal columns for the bar, with a minimum of one. `full` reserves surrounding text, divides remaining columns between unprefixed bars on each template row, and clips overflow to the viewport. both follow resizing; a positive number stays fixed. template width prefixes take precedence. |
 | `--detail[=KEYS]` | | extra rows below the bar: a comma-separated list of `phase`, `value`, `label`, or `all`. a bare `--detail` means `all`. note the `=`: `--detail phase` does not work because the flag takes an optional value. |
 | `--detail-format TEMPLATE` | | one more row rendered from a template. repeatable; rows appear in the order given, after the keyed `--detail` rows. |
 | `--clear-on-exit` | `false` | erase the bar and detail rows when the program exits instead of leaving them on screen. |
@@ -613,7 +616,7 @@ mistakes fail before the bar draws.
 
 | token | renders as |
 |---|---|
-| `%p`, `%{progress}`, `%{bar-only}` | the bar. width comes from the prefix, then a positive `--width`, otherwise 90% of terminal columns. before terminal dimensions arrive, assumes 80 columns (a 72-column bar). text around the bar is additional. |
+| `%p`, `%{progress}`, `%{bar-only}` | the bar. width comes from the prefix, then a positive `--width`, otherwise 90% of terminal columns. `--width full` instead fits bars and surrounding text within each template row. before terminal dimensions arrive, assumes 80 columns (a 72-column automatic bar). with numeric widths, surrounding text is additional. |
 | `%{percent}` | `NN%`, rounded to an integer. |
 | `%{phase}` | current phase with its active child, e.g. `build [link]`; empty if no plan. |
 | `%{subphase}` | active child name without brackets; empty if the current parent has no children. |
@@ -762,57 +765,66 @@ all animations are keyed to wall-clock time, so they look the same at any
 
 ## socket mode
 
-`--socket-path` replaces stdin with a unix domain socket listener.
+`--socket-path` replaces stdin with a unix domain socket listener. the path must be absolute and must not exist at startup. sockets use mode `0600`; put them in a unique private `0700` directory, for example `mktemp -d /tmp/pb3.XXXXXX`. the renderer removes the socket on clean shutdown; the caller owns the directory.
 
-- the path must be absolute, and the file must not exist when the renderer
-  starts. the renderer removes the file on clean shutdown.
-- clients connect, write newline-terminated lines in any protocol, and
-  disconnect. the renderer processes one connection at a time and goes back
-  to `accept` when a client hangs up.
-- socket mode stays alive after completion unless a configured hook closes
-  its pane or process. otherwise stop it explicitly when the work is done.
-  use an [on-complete hook](#completion-hooks) to automate pane removal.
-- use a unique path from `mktemp -d` when several bars may run at once, and
-  keep it short: macos rejects unix socket paths longer than about 104 bytes
-  with `bind: invalid argument`. `mktemp -d -t pb3` under `$TMPDIR` is safe.
+keep paths short: macos permits 103 path bytes and linux 107, reserving a terminator in their 104/108-byte `sun_path` fields. deep scratchpad paths and macos `$TMPDIR` can exceed this. path validation reports the actual byte count and platform limit before binding, with a hint to use a shorter directory. `tmux-start` creates a short private directory automatically.
 
-any tool that can write to a unix socket works as a client. `nc -U` is the
-simplest, but short-lived `nc` runs have been observed to exit successfully
-on macos without the renderer receiving anything. the following sender has
-been verified there and only depends on the system python:
+socket mode stays alive across client disconnects and completion unless a hook closes it. raw newline-delimited clients remain supported; the renderer processes one connection at a time. use the built-in sender for acknowledged delivery:
 
-```bash
-pb_send() {
-  /usr/bin/python3 -c '
-import socket, sys
-with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-    client.settimeout(2)
-    client.connect(sys.argv[1])
-    client.sendall(sys.stdin.buffer.read())
-    client.shutdown(socket.SHUT_WR)
-' "$1"
-}
-
-sock_dir=$(mktemp -d /tmp/pb3.XXXXXX)
-sock="$sock_dir/progress.sock"
-./progress-bar-3000 --socket-path "$sock" --format '%p %{percent}' --detail=phase &
-renderer_pid=$!
-until [[ -S "$sock" ]]; do sleep 0.05; done
-
-printf '@set-phases build,test,review\n@set-total 3\n@phase-name build\n' | pb_send "$sock"
-# ... do the build ...
-printf '@tick\n@phase-name test\n' | pb_send "$sock"
-# ... and so on ...
-
-kill "$renderer_pid"
-wait "$renderer_pid"
-rm -f "$sock"
-rmdir "$sock_dir"
+```sh
+./progress-bar-3000 send --socket-path "$sock" '@value 1' '@phase-name test'
+printf '@value 2\n@phase-name review\n' | ./progress-bar-3000 send --socket-path "$sock"
+./progress-bar-3000 send --socket-path "$sock" --json '{"type":"value","value":2,"phase":"review","subphase":"docs"}'
 ```
 
-the skill in `skills/progress-bar-3000/SKILL.md` has a complete recipe for
-running the renderer in a dedicated tmux pane, sized to the window width,
-driven over a socket from the agent's own pane.
+use a sender and renderer that both include these helpers (source builds after v0.3.0). `send` reads one event per argument, or newline-delimited stdin if none are supplied. it validates the whole batch before applying events. the renderer acknowledges after applying the batch, before starting completion hooks that might close the pane. unknown phase/subphase names retain their existing ignored-selection behaviour.
+
+| sender flag | default | description |
+|---|---|---|
+| `--socket-path PATH` | required | renderer socket |
+| `--json` | `false` | require each event to be a json object |
+| `--timeout DURATION` | `3s` | maximum connect, send and acknowledgement duration |
+
+success is silent. missing/refused sockets, malformed or rejected requests, and missing/invalid acknowledgements exit nonzero. an acknowledgement confirms state application, not pixel rendering or hook success. after a lost acknowledgement, a batch may already have applied: do not blindly retry increments or other non-idempotent events. inspect state/display before recovering.
+
+### acknowledgement wire format
+
+custom clients can send one newline-terminated envelope per connection:
+
+```json
+{"protocol":"progress-bar-3000/send-v1","events":["@value 1","@phase-name test"]}
+```
+
+successful response:
+
+```json
+{"protocol":"progress-bar-3000/send-v1","ok":true,"count":2}
+```
+
+a rejection returns `ok:false`, `count:0`, and an `error` string. batches are limited to 256 events and 1 mib of encoded request data. the built-in sender limits replies to 64 kib. raw clients receive no application acknowledgement; the skill retains a legacy fallback in its appendix.
+
+### one-call tmux bootstrap
+
+from the agent's tmux pane:
+
+```sh
+./progress-bar-3000 tmux-start --phases build,test,review --total 3 --width full --auto-close
+```
+
+the command prints json handles: `pane`, `socket`, `pid`, and `window`. retain the actual values for subsequent `send` calls. `--output shell` emits safely quoted `PB_PANE`, `PB_SOCK`, `PB_PID`, and `PB_WINDOW` assignments instead; shell variables do not persist across independent agent tool calls.
+
+| bootstrap flag | default | description |
+|---|---|---|
+| `--phases a,b,c` | required | nonempty comma-separated phase names |
+| `--total N` | phase count | positive work total |
+| `--width WIDTH` | `full` | full viewport row, automatic `0`, or positive columns |
+| `--auto-close` | `true` | remove the private socket directory and exact pane at completion; use `--auto-close=false` to manage cleanup yourself |
+| `--output FORMAT` | `json` | `json` or `shell` |
+| `--timeout DURATION` | `10s` | maximum startup time |
+
+bootstrap requires `TMUX` and the agent's own `TMUX_PANE`. it uses that pane directly as `-t` in a single `tmux split-window -d -v -l 2` invocation which also starts the renderer command, then verifies the new pane belongs to the same window. it sets `gradient-granular`, cycling tint, `%p %{percent}`, and one `%{phases}` detail row. it hides only its own border label with `tmux set-option -p -t <pane> pane-border-format ""`.
+
+it sends `@set-phases` first, initializes total/value/phase, registers cleanup, and verifies the initial two-row frame before returning success. failed startup rolls back owned resources. completion is acknowledged before the hook removes the socket directory and pane. if later task work fails below 100%, the caller must remove the saved owned pane and directory explicitly; do not fake completion to clean up. the [agent skill](skills/progress-bar-3000/SKILL.md) provides the complete workflow and honest milestone rules.
 
 ## claude code plugin
 

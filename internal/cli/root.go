@@ -33,6 +33,7 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	}
 
 	backgroundRune := ""
+	width := "0"
 
 	cmd := &cobra.Command{
 		Use:           "progress-bar-3000",
@@ -41,6 +42,12 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var err error
+			cfg.Width, cfg.WidthFull, err = config.ParseWidth(width)
+			if err != nil {
+				return err
+			}
+
 			if cmd.Flags().Changed("bg-char") && utf8.RuneCountInString(backgroundRune) != 1 {
 				return fmt.Errorf("--bg-char must be exactly one rune")
 			}
@@ -71,7 +78,7 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.Phase, "phase", cfg.Phase, "phase label")
 	cmd.Flags().StringVar(&cfg.SocketPath, "socket-path", cfg.SocketPath, "unix socket path")
 	cmd.Flags().StringVar(&cfg.OnComplete, "on-complete", cfg.OnComplete, "shell command to run once at 100% (reset re-arms it)")
-	cmd.Flags().IntVar(&cfg.Width, "width", cfg.Width, "bar width in columns (0 = 90% of terminal width, follows resizing)")
+	cmd.Flags().StringVar(&width, "width", width, "bar width: full fits the viewport including other text; 0 = 90% of terminal width; positive integer = fixed columns")
 	cmd.Flags().StringVar(&cfg.Detail, "detail", cfg.Detail, "show extra line(s) below the bar: comma-separated list of label, phase, value, or all (bare --detail = all)")
 	cmd.Flags().Lookup("detail").NoOptDefVal = config.DetailAll
 	cmd.Flags().StringArrayVar(&cfg.DetailFormats, "detail-format", cfg.DetailFormats, "additional detail row rendered from a format-string template (repeatable; same tokens as --format)")
@@ -80,6 +87,7 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	cmd.Flags().Float64Var(&cfg.Lerp, "lerp", cfg.Lerp, "lerp factor")
 	cmd.Flags().StringVar((*string)(&cfg.TintAnimation), "tint-animation", string(cfg.TintAnimation), "tint animation: pulse, shimmer, or cycle (omit for none)")
 	cmd.Flags().BoolVar(&cfg.ASCII, "ascii", cfg.ASCII, "use ascii characters")
+	cmd.AddCommand(newSendCommand(), newTmuxStartCommand())
 
 	return cmd
 }

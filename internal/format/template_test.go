@@ -145,3 +145,29 @@ func TestTemplateTokenWidth(t *testing.T) {
 		})
 	}
 }
+
+func TestTemplateLinesPreserveTokensAndBlankLines(t *testing.T) {
+	tmpl, err := Parse("\n%7{progress} %%\n\n%{label}\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := tmpl.Lines()
+	if len(lines) != 5 {
+		t.Fatalf("line count = %d, want 5", len(lines))
+	}
+	resolver := &recordingResolver{values: map[string]string{"progress": "bar", "label": "one\ntwo"}}
+	for i, want := range []string{"", "bar %", "", "one\ntwo", ""} {
+		if got := lines[i].Render(resolver); got != want {
+			t.Errorf("line %d = %q, want %q", i, got, want)
+		}
+	}
+	if width, ok := lines[1].TokenWidth("progress"); !ok || width != 7 {
+		t.Errorf("token width = %d, %v; want 7, true", width, ok)
+	}
+	if got := tmpl.Render(resolver); got != "\nbar %\n\none\ntwo\n" {
+		t.Errorf("original template changed: %q", got)
+	}
+	if lines := (Template{}).Lines(); len(lines) != 1 {
+		t.Errorf("empty template lines = %d, want 1", len(lines))
+	}
+}

@@ -132,6 +132,7 @@ type Config struct {
 	SocketPath      string
 	OnComplete      string
 	Width           int
+	WidthFull       bool
 	Detail          string
 	DetailFormats   []string
 	ClearOnExit     bool

@@ -71,6 +71,9 @@ type unixSocketSource struct {
 }
 
 func NewUnixSocketSource(path string) (Source, error) {
+	if err := ValidateSocketPath(path); err != nil {
+		return nil, err
+	}
 	if _, err := os.Lstat(path); err == nil {
 		return nil, fmt.Errorf("unix socket path %q already exists: %w", path, os.ErrExist)
 	} else if !os.IsNotExist(err) {
@@ -94,6 +97,20 @@ func NewUnixSocketSource(path string) (Source, error) {
 }
 
 func (s *unixSocketSource) Run(ctx context.Context, emit func(string) error) error {
+	return s.RunRequests(ctx, func(request Request) error {
+		for _, line := range request.Lines {
+			if err := emit(line); err != nil {
+				return err
+			}
+		}
+		if request.Reply != nil {
+			_ = request.Reply(nil)
+		}
+		return nil
+	})
+}
+
+func (s *unixSocketSource) RunRequests(ctx context.Context, emit func(Request) error) error {
 	stop := make(chan struct{})
 	defer close(stop)
 	defer func() { _ = s.Close() }()
@@ -124,19 +141,33 @@ func (s *unixSocketSource) Run(ctx context.Context, emit func(string) error) err
 			return err
 		}
 		scanner := bufio.NewScanner(conn)
+		scanner.Buffer(make([]byte, 4096), MaxRequestBytes+1)
 		for scanner.Scan() {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if err := emit(scanner.Text()); err != nil {
+			lines, framed, parseErr := decodeSendRequest(scanner.Text())
+			if framed {
+				reply := func(err error) error {
+					return writeAcknowledgement(conn, len(lines), err)
+				}
+				if parseErr != nil {
+					_ = reply(parseErr)
+				} else if err := emit(Request{Lines: lines, Reply: reply}); err != nil {
+					_ = reply(err)
+				}
+				// one framed batch per connection; malformed batches do not kill the renderer.
+				break
+			}
+			if err := emit(Request{Lines: []string{scanner.Text()}}); err != nil {
 				return err
 			}
 		}
+		if err := scanner.Err(); err != nil && !isClosedNetworkError(err) {
+			_ = writeAcknowledgement(conn, 0, fmt.Errorf("read socket request (limit %d bytes): %w", MaxRequestBytes, err))
+		}
 		s.clearActiveConn(conn)
 		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if err := scanner.Err(); err != nil && !isClosedNetworkError(err) {
 			return err
 		}
 	}

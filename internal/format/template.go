@@ -28,6 +28,30 @@ type Template struct {
 	segments []segment
 }
 
+// Lines splits a template at literal newlines, preserving token names, width
+// prefixes, escaped percent signs, and empty lines. Newlines in resolved token
+// values remain part of their containing line.
+func (t Template) Lines() []Template {
+	lines := []Template{{}}
+	for _, seg := range t.segments {
+		if seg.kind != segmentLiteral {
+			last := &lines[len(lines)-1]
+			last.segments = append(last.segments, seg)
+			continue
+		}
+		for i, literal := range strings.Split(seg.lit, "\n") {
+			if i > 0 {
+				lines = append(lines, Template{})
+			}
+			if literal != "" {
+				last := &lines[len(lines)-1]
+				last.segments = append(last.segments, segment{kind: segmentLiteral, lit: literal})
+			}
+		}
+	}
+	return lines
+}
+
 func Parse(in string) (Template, error) {
 	var segments []segment
 	var literal strings.Builder
