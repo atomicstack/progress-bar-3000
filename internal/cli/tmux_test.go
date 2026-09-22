@@ -72,11 +72,24 @@ func TestTmuxStartBootstrap(t *testing.T) {
 			t.Errorf("renderer missing %q: %s", token, renderer)
 		}
 	}
-	if !reflect.DeepEqual(f.command("set-option"), []string{"set-option", "-p", "-t", "%42", "pane-border-format", ""}) {
-		t.Fatalf("wrong border args: %#v", f.command("set-option"))
+	if f.command("set-option") != nil {
+		t.Fatalf("border format changed without --clear-border-format: %#v", f.command("set-option"))
 	}
 	if f.command("kill-pane") != nil {
 		t.Fatal("successful start killed pane")
+	}
+}
+
+func TestTmuxStartClearBorderFormat(t *testing.T) {
+	f := newFakeTmux(t)
+	cmd := newTmuxStartCommandWith(f.dependencies())
+	cmd.SetOut(io.Discard)
+	cmd.SetArgs([]string{"--phases", "build,verify", "--clear-border-format"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(f.command("set-option"), []string{"set-option", "-p", "-t", "%42", "pane-border-format", ""}) {
+		t.Fatalf("wrong border args: %#v", f.command("set-option"))
 	}
 }
 

@@ -54,6 +54,7 @@ progress-bar-3000 send --socket-path "$(jq -r '.socket' /your/task/progress.json
 | `tmux-start --total N` | phase count | positive work total |
 | `tmux-start --width full` | `full` | full, automatic `0`, or positive columns |
 | `tmux-start --auto-close` | `true` | remove its socket directory and pane on completion; `--auto-close=false` disables this |
+| `tmux-start --clear-border-format` | `false` | empty only the new pane's `pane-border-format`; the border line remains |
 | `tmux-start --output json` | `json` | json handles or `shell` assignments |
 | `tmux-start --timeout 10s` | `10s` | bounded startup and initial-frame verification |
 | `send --socket-path PATH` | required | use the actual returned socket |
@@ -80,7 +81,7 @@ tmux split-window -d -v -l 2 -t "$TMUX_PANE" -P \
   -F '#{pane_id}\t#{pane_pid}\t#{window_id}' 'exec /absolute/path/to/progress-bar-3000 ...'
 ```
 
-this illustrates the mechanism; use `tmux-start` for the complete runnable bootstrap. it shell-quotes the executable/arguments, verifies the returned window matches, retains the exact pane id and pid, and hides only the new pane's border label using the correct argument order:
+this illustrates the mechanism; use `tmux-start` for the complete runnable bootstrap. it shell-quotes the executable/arguments, verifies the returned window matches, and retains the exact pane id and pid. with `--clear-border-format` it also empties only the new pane's border format string using the correct argument order:
 
 ```sh
 tmux set-option -p -t "$PB_PANE" pane-border-format ""
@@ -162,7 +163,7 @@ this manual example only closes the pane; the caller still owns directory cleanu
 
 hooks fire once when the actual value is at least a positive effective total, independent of rounding and animation. setting a hook after completion fires it immediately if none has fired. resets, including `@set-phases`, retain and re-arm the hook. replacing an already-fired hook does not re-arm it. a batch containing completion, reset and completion can queue multiple invocations; hooks start in event order after acknowledgement.
 
-`--on-start 'command'` runs once when the renderer starts, after its socket is listening, and always finishes before any completion hook. it is flag-only. in a tmux pane the renderer inherits that pane's `TMUX_PANE`, so a manual split can style its own pane, e.g. `--on-start 'tmux set-option -p -t "$TMUX_PANE" pane-border-format ""'`. `tmux-start` already clears the border itself.
+`--on-start 'command'` runs once when the renderer starts, after its socket is listening, and always finishes before any completion hook. it is flag-only. in a tmux pane the renderer inherits that pane's `TMUX_PANE`, so a manual split can style its own pane, e.g. `--on-start 'tmux set-option -p -t "$TMUX_PANE" pane-border-format ""'`. `tmux-start --clear-border-format` does the same for bootstrapped panes.
 
 commands run serially through `/bin/sh -c`, inherit environment/cwd, receive no stdin, and write output to stderr. normal shutdown waits for hooks and reports failures nonzero; there is no hook timeout, so keep cleanup finite. labels and format tokens are not interpolated into commands. allow only trusted socket producers, because they can register shell commands.
 

@@ -36,12 +36,13 @@ type tmuxDependencies struct {
 }
 
 type tmuxStartOptions struct {
-	phases    string
-	total     int
-	width     string
-	autoClose bool
-	output    string
-	timeout   time.Duration
+	phases            string
+	total             int
+	width             string
+	autoClose         bool
+	clearBorderFormat bool
+	output            string
+	timeout           time.Duration
 }
 
 func newTmuxStartCommand() *cobra.Command {
@@ -77,6 +78,7 @@ func newTmuxStartCommandWith(deps tmuxDependencies) *cobra.Command {
 	cmd.Flags().IntVar(&options.total, "total", 0, "total steps (defaults to the number of phases)")
 	cmd.Flags().StringVar(&options.width, "width", "full", "bar width: full, 0 (90% automatic), or positive columns")
 	cmd.Flags().BoolVar(&options.autoClose, "auto-close", true, "remove the socket directory and close the owned pane on completion")
+	cmd.Flags().BoolVar(&options.clearBorderFormat, "clear-border-format", false, "set the new pane's pane-border-format to an empty string")
 	cmd.Flags().StringVar(&options.output, "output", "json", "handle output: json or shell")
 	cmd.Flags().DurationVar(&options.timeout, "timeout", 10*time.Second, "maximum startup duration")
 	return cmd
@@ -200,8 +202,10 @@ func startTmux(
 	if handles.Window != window {
 		return fmt.Errorf("progress pane window %q differs from parent window %q", handles.Window, window)
 	}
-	if _, err := deps.run(ctx, "set-option", "-p", "-t", handles.Pane, "pane-border-format", ""); err != nil {
-		return fmt.Errorf("set progress pane border: %w", err)
+	if options.clearBorderFormat {
+		if _, err := deps.run(ctx, "set-option", "-p", "-t", handles.Pane, "pane-border-format", ""); err != nil {
+			return fmt.Errorf("set progress pane border: %w", err)
+		}
 	}
 	if err := waitForSocket(ctx, handles.Socket); err != nil {
 		return err

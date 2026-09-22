@@ -257,7 +257,7 @@ the pane closes automatically. the [agent skill](skills/progress-bar-3000/SKILL.
 
 ### startup hook
 
-`--on-start COMMAND` runs a shell command once when the renderer starts, after its input source (including a `--socket-path` listener) is ready. it is only available as a flag: there is no control or json equivalent. a renderer started in a tmux pane inherits that pane's `TMUX_PANE`, so the hook can target its own pane, e.g. to hide the pane border:
+`--on-start COMMAND` runs a shell command once when the renderer starts, after its input source (including a `--socket-path` listener) is ready. it is only available as a flag: there is no control or json equivalent. a renderer started in a tmux pane inherits that pane's `TMUX_PANE`, so the hook can target its own pane, e.g. to empty its border format string:
 
 ```sh
 tmux split-window -d -l 2 -t "$TMUX_PANE" -P -F '#{pane_id}' \
@@ -869,10 +869,11 @@ the command prints json handles: `pane`, `socket`, `pid`, and `window`. retain t
 | `--total N` | phase count | positive work total |
 | `--width WIDTH` | `full` | full viewport row, automatic `0`, or positive columns |
 | `--auto-close` | `true` | remove the private socket directory and exact pane at completion; use `--auto-close=false` to manage cleanup yourself |
+| `--clear-border-format` | `false` | set the new pane's `pane-border-format` to an empty string; the border line itself remains |
 | `--output FORMAT` | `json` | `json` or `shell` |
 | `--timeout DURATION` | `10s` | maximum startup time |
 
-bootstrap requires `TMUX` and the agent's own `TMUX_PANE`. it uses that pane directly as `-t` in a single `tmux split-window -d -v -l 2` invocation which also starts the renderer command, then verifies the new pane belongs to the same window. it sets `gradient-granular`, cycling tint, `%p %{percent}`, and one `%{phases}` detail row. it hides only its own border label with `tmux set-option -p -t <pane> pane-border-format ""`.
+bootstrap requires `TMUX` and the agent's own `TMUX_PANE`. it uses that pane directly as `-t` in a single `tmux split-window -d -v -l 2` invocation which also starts the renderer command, then verifies the new pane belongs to the same window. it sets `gradient-granular`, cycling tint, `%p %{percent}`, and one `%{phases}` detail row. with `--clear-border-format` it also empties only its own pane's border format string with `tmux set-option -p -t <pane> pane-border-format ""`; by default the border is left alone.
 
 it sends `@set-phases` first, initializes total/value/phase, registers cleanup, and verifies the initial two-row frame before returning success. failed startup rolls back owned resources. completion is acknowledged before the hook removes the socket directory and pane. if later task work fails below 100%, the caller must remove the saved owned pane and directory explicitly; do not fake completion to clean up. the [agent skill](skills/progress-bar-3000/SKILL.md) provides the complete workflow and honest milestone rules.
 
