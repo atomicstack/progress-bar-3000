@@ -8,7 +8,7 @@ a terminal progress renderer for shell scripts and agents. send events over stdi
 - plain lines, numeric values, control commands, or json input.
 - phase and sub-phase plans, labels, metadata, rates, and eta through format templates.
 - socket mode for long-running workflows and a bundled agent skill for tmux.
-- completion hooks for automatic cleanup, including closing the bar’s tmux pane.
+- startup and completion hooks, e.g. for styling or closing the bar’s tmux pane.
 
 ## quick start
 
@@ -255,6 +255,18 @@ the pane closes automatically. the [agent skill](skills/progress-bar-3000/SKILL.
 - hooks run serially without blocking redraws. normal shutdown, including `ctrl-c`, waits for queued hooks; hook failures make the eventual process exit nonzero. hooks must finish on their own: there is no timeout or cancellation of a running hook.
 - input clients can configure executable shell commands. use trusted producers and a private socket directory. socket files are restricted to mode `0600`.
 
+### startup hook
+
+`--on-start COMMAND` runs a shell command once when the renderer starts, after its input source (including a `--socket-path` listener) is ready. it is only available as a flag: there is no control or json equivalent. a renderer started in a tmux pane inherits that pane's `TMUX_PANE`, so the hook can target its own pane, e.g. to hide the pane border:
+
+```sh
+tmux split-window -d -l 2 -t "$TMUX_PANE" -P -F '#{pane_id}' \
+    "exec ./progress-bar-3000 --socket-path $sock --total 3 \
+        --on-start 'tmux set-option -p -t \"\$TMUX_PANE\" pane-border-format \"\"'"
+```
+
+the startup hook shares the serial hook queue, so it always finishes before any completion hook starts. it follows the same execution rules as completion hooks: `/bin/sh -c`, no stdin, output to stderr, and a failure makes the eventual exit nonzero without stopping the renderer.
+
 ## things to know
 
 - the producer runs jobs and reports their success; the renderer only executes commands explicitly configured as completion hooks.
@@ -457,6 +469,7 @@ run `./progress-bar-3000 --help` for the short form. renderer flags are optional
 | `--input-mode MODE` | `auto` | one of `auto`, `lines`, `value`, `json`, `control`. only `value` changes how a line is parsed; the other four all rely on prefix auto-detection. see [Input protocols](#input-protocols). |
 | `--socket-path /ABS/PATH.sock` | | listen on a unix domain socket instead of reading stdin. must be absolute and must not already exist. |
 | `--on-complete COMMAND` | empty | run a shell command once at actual 100%; see [completion hooks](#completion-hooks). |
+| `--on-start COMMAND` | empty | run a shell command once when the renderer starts; see [startup hook](#startup-hook). |
 
 ### layout and text
 

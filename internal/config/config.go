@@ -134,6 +134,7 @@ type Config struct {
 	Phase           string
 	SocketPath      string
 	OnComplete      string
+	OnStart         string
 	Width           int
 	WidthFull       bool
 	Detail          string

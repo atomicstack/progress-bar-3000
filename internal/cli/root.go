@@ -81,6 +81,7 @@ func NewRootCommand(run func(config.Config) error) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.PhaseFile, "phase-file", cfg.PhaseFile, "phase plan file (text names or json with optional subphases)")
 	cmd.Flags().StringVar(&cfg.Phase, "phase", cfg.Phase, "phase label")
 	cmd.Flags().StringVar(&cfg.SocketPath, "socket-path", cfg.SocketPath, "unix socket path")
+	cmd.Flags().StringVar(&cfg.OnStart, "on-start", cfg.OnStart, "shell command to run once when the renderer starts")
 	cmd.Flags().StringVar(&cfg.OnComplete, "on-complete", cfg.OnComplete, "shell command to run once at 100% (reset re-arms it)")
 	cmd.Flags().StringVar(&width, "width", width, "bar width: full fits the viewport including other text; 0 = 90% of terminal width; positive integer = fixed columns")
 	cmd.Flags().StringVar(&cfg.Detail, "detail", cfg.Detail, "show extra line(s) below the bar: comma-separated list of label, phase, value, or all (bare --detail = all)")

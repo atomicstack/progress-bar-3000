@@ -49,6 +49,9 @@ func Run(cfg config.Config, in io.Reader, out, stderr io.Writer) (runErr error) 
 		_ = source.Close()
 		runErr = errors.Join(runErr, model.hooks.wait())
 	}()
+	// The source is listening before the start hook runs, so a hook may send
+	// to the socket. Hooks are shared with the program's copy of the model.
+	model.runStartHook()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

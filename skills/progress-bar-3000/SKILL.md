@@ -162,6 +162,8 @@ this manual example only closes the pane; the caller still owns directory cleanu
 
 hooks fire once when the actual value is at least a positive effective total, independent of rounding and animation. setting a hook after completion fires it immediately if none has fired. resets, including `@set-phases`, retain and re-arm the hook. replacing an already-fired hook does not re-arm it. a batch containing completion, reset and completion can queue multiple invocations; hooks start in event order after acknowledgement.
 
+`--on-start 'command'` runs once when the renderer starts, after its socket is listening, and always finishes before any completion hook. it is flag-only. in a tmux pane the renderer inherits that pane's `TMUX_PANE`, so a manual split can style its own pane, e.g. `--on-start 'tmux set-option -p -t "$TMUX_PANE" pane-border-format ""'`. `tmux-start` already clears the border itself.
+
 commands run serially through `/bin/sh -c`, inherit environment/cwd, receive no stdin, and write output to stderr. normal shutdown waits for hooks and reports failures nonzero; there is no hook timeout, so keep cleanup finite. labels and format tokens are not interpolated into commands. allow only trusted socket producers, because they can register shell commands.
 
 ## socket mode without tmux

@@ -20,6 +20,12 @@ type completionHooks struct {
 }
 
 func (h *completionHooks) start(command string) {
+	h.startNamed("completion", command)
+}
+
+// startNamed queues command behind every earlier hook, so a startup hook
+// always finishes before the first completion hook begins.
+func (h *completionHooks) startNamed(name, command string) {
 	previous := h.tail
 	done := make(chan struct{})
 	h.tail = done
@@ -36,7 +42,7 @@ func (h *completionHooks) start(command string) {
 		cmd.Stdout = h.output
 		cmd.Stderr = h.output
 		if err := cmd.Run(); err != nil {
-			h.err = errors.Join(h.err, fmt.Errorf("completion hook failed: %w", err))
+			h.err = errors.Join(h.err, fmt.Errorf("%s hook failed: %w", name, err))
 		}
 	}()
 }
@@ -44,6 +50,13 @@ func (h *completionHooks) start(command string) {
 func (h *completionHooks) wait() error {
 	h.pending.Wait()
 	return h.err
+}
+
+// runStartHook queues --on-start once, before any input event is applied.
+func (m *Model) runStartHook() {
+	if strings.TrimSpace(m.cfg.OnStart) != "" {
+		m.hooks.startNamed("start", m.cfg.OnStart)
+	}
 }
 
 func (m *Model) runCompletionHook() {
