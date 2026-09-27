@@ -9,7 +9,7 @@ a terminal progress renderer. report completed work; it draws the bar. use socke
 
 ## one-call start, one-line updates
 
-these helpers require v0.4.0 or newer. in a checkout, run `make build` once if needed and use the absolute path to its `progress-bar-3000` binary. for a source-based plugin install, use `$CLAUDE_PLUGIN_ROOT/progress-bar-3000` after `make -C "$CLAUDE_PLUGIN_ROOT" build`. release installations can use the v0.4.0 or newer binary on `PATH`. substitute that binary path for `progress-bar-3000` in every example; no `--help` probing is needed.
+these helpers require v0.4.0 or newer. in a checkout, run `make build` once if needed and use the absolute path to its `progress-bar-3000` binary. for a source-based plugin install, use `$CLAUDE_PLUGIN_ROOT/progress-bar-3000` after `make -C "$CLAUDE_PLUGIN_ROOT" build`. release installations can use the v0.4.0 or newer binary on `PATH`; `--on-start`, `tmux-start --clear-border-format` and comma-separated animations need v0.5.0. substitute that binary path for `progress-bar-3000` in every example; no `--help` probing is needed.
 
 inside tmux, start the whole initialized display with one invocation:
 
@@ -145,7 +145,7 @@ for a bootstrap-created pane, send a json `reset` with this `phases` array and t
 
 ## optional animation effects
 
-source builds after v0.4.0 accept comma-separated renderer selections such as `--tint-animation interference,edge-glow,milestone-ripple`. any subset works; order does not matter, duplicates are ignored, and whitespace around names is trimmed. unknown names and empty list entries fail validation. omit the flag for no tint animations. the released single-value `pulse`, `shimmer` and `cycle` modes remain compatible and can also be combined.
+v0.5.0 and newer accept comma-separated renderer selections such as `--tint-animation interference,edge-glow,milestone-ripple`. any subset works; order does not matter, duplicates are ignored, and whitespace around names is trimmed. unknown names and empty list entries fail validation. omit the flag for no tint animations. the released single-value `pulse`, `shimmer` and `cycle` modes remain compatible and can also be combined.
 
 interference continuously moves light through the fill; edge glow breathes at its boundary. milestone ripple runs only after a forward value/tick/increment update advances the filled fraction, fading within 1.4 seconds. phase/subphase changes, duplicate values and denominator-only changes do not trigger ripples. the newest ripple replaces the previous one; resets clear it. effects never change progress or delay completion hooks. there are no separate event-animation flags.
 
