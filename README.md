@@ -488,7 +488,7 @@ run `./progress-bar-3000 --help` for the short form. renderer flags are optional
 | `--style STYLE` | `gradient-granular` | fill glyphs: `plain`, `block`, `granular`, `shaded`, `gradient-block`, `gradient-granular`, `gradient-shaded`. |
 | `--bg-style STYLE` | `space` | track behind the unfilled portion: `none`, `space`, `ascii`, `shade-light`, `shade-medium`, `shade-dark`, `custom`. |
 | `--bg-char RUNE` | | exactly one rune. required when `--bg-style custom`. |
-| `--color-mode MODE` | `auto` | `auto`, `truecolor`, `256`, `16`, `none`. `auto` reads the terminal's advertised profile via termenv. |
+| `--color-mode MODE` | `auto` | `auto`, `truecolor`, `256`, `16`, `none`. `auto` detects the terminal's profile via charm's colorprofile. |
 | `--gradient-start HEX` | `#ffffff` | colour of the leftmost cell. six hex digits, `#` optional. |
 | `--gradient-end HEX` | `#0087ff` | colour of the rightmost cell. |
 | `--tint-animation LIST` | | comma-separated `pulse`, `shimmer`, `cycle`, `interference`, `edge-glow`, `milestone-ripple`; any combination, duplicates ignored, fixed rendering order. omit for no tint animation. |
@@ -792,8 +792,10 @@ colour.
 
 ### colour modes
 
-`auto` maps the terminal's termenv profile to `truecolor`, `256`, `16`, or
-`none`. truecolor is used when detection is inconclusive. force a mode when
+`auto` maps the terminal's detected profile to `truecolor`, `256`, `16`, or
+`none`. detection takes the best of the environment (`COLORTERM`, `TERM`,
+`NO_COLOR`), terminfo, and, inside tmux, `tmux info`'s `Tc`/`RGB` flags.
+truecolor is used when detection is inconclusive. force a mode when
 running under a multiplexer or a ci recorder that misreports its
 capabilities. `none` emits no escape codes at all.
 

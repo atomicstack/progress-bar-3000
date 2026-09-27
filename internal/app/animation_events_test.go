@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"progress-bar-3000/internal/config"
 	"progress-bar-3000/internal/input"
 	"progress-bar-3000/internal/progress"
@@ -52,7 +52,7 @@ func TestEventAnimationsReactToActualChanges(t *testing.T) {
 			m = animationUpdate(m, frameMsg{Now: at.Add(300 * time.Millisecond)})
 			baseline := m
 			baseline.cfg.TintAnimation = ""
-			got, want := m.View(), baseline.View()
+			got, want := m.View().Content, baseline.View().Content
 			if (got != want) != tc.want {
 				t.Fatalf("effect visible=%v, want %v", got != want, tc.want)
 			}
@@ -62,7 +62,7 @@ func TestEventAnimationsReactToActualChanges(t *testing.T) {
 			m = animationUpdate(m, frameMsg{Now: at.Add(3 * time.Second)})
 			baseline = m
 			baseline.cfg.TintAnimation = ""
-			if m.View() != baseline.View() {
+			if m.View().Content != baseline.View().Content {
 				t.Fatal("event animation did not expire")
 			}
 		})
@@ -75,9 +75,9 @@ func TestAmbientAnimationsReachRenderer(t *testing.T) {
 			m := animationModel()
 			m.cfg.TintAnimation = config.TintAnimation(name)
 			m = animationUpdate(m, frameMsg{Now: time.Unix(100, 0)})
-			first := m.View()
+			first := m.View().Content
 			m = animationUpdate(m, frameMsg{Now: time.Unix(101, 370000000)})
-			second := m.View()
+			second := m.View().Content
 			if first == second {
 				t.Fatal("ambient animation did not advance")
 			}

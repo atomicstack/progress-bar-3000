@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"progress-bar-3000/internal/config"
 	"progress-bar-3000/internal/input"
@@ -87,7 +87,7 @@ func TestInitialCompletionHookAndInterruptedInput(t *testing.T) {
 		{"initial complete eof", 2, doneMsg{}, "x"},
 		{"partial eof", 1, doneMsg{}, ""},
 		{"partial error", 1, errMsg{Err: io.ErrUnexpectedEOF}, ""},
-		{"partial cancel", 1, tea.KeyMsg{Type: tea.KeyCtrlC}, ""},
+		{"partial cancel", 1, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var output bytes.Buffer

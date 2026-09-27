@@ -11,8 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/colorprofile"
+
 	"progress-bar-3000/internal/config"
 	"progress-bar-3000/internal/input"
+	"progress-bar-3000/internal/render"
 )
 
 func TestBootstrapStateUsesPhaseFileAndCurrentValue(t *testing.T) {
@@ -151,5 +154,23 @@ func TestFinalizeRenderedBlockEmptyViewSkipsCursorUp(t *testing.T) {
 	want := "\x1b[K\n"
 	if got := out.String(); got != want {
 		t.Fatalf("finalizeRenderedBlock() wrote %q, want %q", got, want)
+	}
+}
+
+func TestTeaProfileMatchesResolvedColorMode(t *testing.T) {
+	// The renderer downsamples frames to this profile, so it must match the
+	// resolved mode exactly; a lower profile would override --color-mode.
+	for _, tc := range []struct {
+		mode render.Profile
+		want colorprofile.Profile
+	}{
+		{render.ProfileTrueColor, colorprofile.TrueColor},
+		{render.Profile256, colorprofile.ANSI256},
+		{render.Profile16, colorprofile.ANSI},
+		{render.ProfileNone, colorprofile.ASCII},
+	} {
+		if got := teaProfile(tc.mode); got != tc.want {
+			t.Fatalf("teaProfile(%q) = %v, want %v", tc.mode, got, tc.want)
+		}
 	}
 }

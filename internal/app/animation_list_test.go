@@ -15,7 +15,7 @@ func TestAnimationListComposesWithFixedOrder(t *testing.T) {
 		at := time.Unix(100, 0)
 		m = animationUpdate(m, eventMsg{Event: input.Event{Kind: input.KindValue, Value: 60}, Now: at})
 		m = animationUpdate(m, frameMsg{Now: at.Add(350 * time.Millisecond)})
-		return m.View()
+		return m.View().Content
 	}
 	all := view("interference,edge-glow,milestone-ripple")
 	if all != view("milestone-ripple,edge-glow,interference,edge-glow") {

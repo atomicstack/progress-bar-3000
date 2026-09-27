@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"progress-bar-3000/internal/config"
 	"progress-bar-3000/internal/progress"
@@ -27,7 +27,7 @@ func TestDefaultBarWidthUsesNinetyPercentOfTerminal(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/%d", format, tc.columns), func(t *testing.T) {
 				m := barWidthModel(format, 0)
 				next, _ := m.Update(tea.WindowSizeMsg{Width: tc.columns, Height: 24})
-				if got := len([]rune(stripANSI(next.(Model).View()))); got != tc.want {
+				if got := len([]rune(stripANSI(next.(Model).View().Content))); got != tc.want {
 					t.Fatalf("bar width = %d, want %d for %d terminal columns", got, tc.want, tc.columns)
 				}
 			})
@@ -37,7 +37,7 @@ func TestDefaultBarWidthUsesNinetyPercentOfTerminal(t *testing.T) {
 
 func TestDefaultBarWidthBeforeTerminalSizeArrives(t *testing.T) {
 	m := barWidthModel("%p", 0)
-	if got := len([]rune(stripANSI(m.View()))); got != 72 {
+	if got := len([]rune(stripANSI(m.View().Content))); got != 72 {
 		t.Fatalf("initial bar width = %d, want 72", got)
 	}
 }
@@ -58,7 +58,7 @@ func TestBarWidthRespondsToResizeAndHonorsOverrides(t *testing.T) {
 			for i, columns := range []int{80, 120, 60} {
 				next, _ := m.Update(tea.WindowSizeMsg{Width: columns, Height: 24})
 				m = next.(Model)
-				if got := len([]rune(stripANSI(m.View()))); got != tc.want[i] {
+				if got := len([]rune(stripANSI(m.View().Content))); got != tc.want[i] {
 					t.Fatalf("bar width after resize to %d = %d, want %d", columns, got, tc.want[i])
 				}
 			}

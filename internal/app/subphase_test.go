@@ -58,7 +58,7 @@ func TestSubphaseLifecycle(t *testing.T) {
 		{"@set-subphases orphan", "|"},
 	} {
 		m = applySubphaseLine(t, m, step.line)
-		if got := m.View(); got != step.want {
+		if got := m.View().Content; got != step.want {
 			t.Fatalf("after %s: view = %q, want %q", step.line, got, step.want)
 		}
 		if m.state.Value != 0 {
@@ -86,7 +86,7 @@ func TestSubphaseCombinedProgressUpdates(t *testing.T) {
 			m := NewModel(config.Config{Format: "%{phase}", FPS: 60}, progress.State{})
 			m = applySubphaseLine(t, m, `{"type":"reset","total":100,"phases":[{"name":"build","subphases":["compile","link"]},{"name":"test","subphases":["unit","integration"]},"ship"]}`)
 			m = applySubphaseLine(t, m, tc.line)
-			if got := m.View(); got != tc.wantPhase || m.state.Value != tc.wantValue || m.state.Total != 100 {
+			if got := m.View().Content; got != tc.wantPhase || m.state.Value != tc.wantValue || m.state.Total != 100 {
 				t.Fatalf("view = %q, value = %v, total = %d; want %q, %v, 100", got, m.state.Value, m.state.Total, tc.wantPhase, tc.wantValue)
 			}
 			if m.state.DisplayValue != 0 {
@@ -120,7 +120,7 @@ func TestSubphaseBootstrapAndRendering(t *testing.T) {
 			t.Fatalf("bootstrap changed parent identity or total: %q, %d", state.CurrentPhase(), state.Total)
 		}
 		m := NewModel(cfg, state)
-		rows := strings.Split(stripANSI(m.View()), "\n")
+		rows := strings.Split(stripANSI(m.View().Content), "\n")
 		if strings.TrimSpace(rows[0]) != tc.want || rows[1] != "phase: build [compile]" {
 			t.Fatalf("view = %q, want %q and phase detail", rows, tc.want)
 		}

@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	tea "github.com/charmbracelet/bubbletea"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
 
 	"progress-bar-3000/internal/config"
 	"progress-bar-3000/internal/input"

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/term"
 
 	"progress-bar-3000/internal/config"
@@ -37,7 +37,10 @@ func Run(cfg config.Config, in io.Reader, out, stderr io.Writer) (runErr error) 
 	if stderr != nil {
 		model.hooks.output = stderr
 	}
-	program := tea.NewProgram(model, tea.WithOutput(out))
+	// Pin the renderer to the resolved profile. Bubble Tea downsamples every
+	// frame to its own detected profile, which would override an explicit
+	// --color-mode above what the environment advertises.
+	program := tea.NewProgram(model, tea.WithOutput(withEraseRows(out)), tea.WithColorProfile(teaProfile(render.Profile(cfg.ColorMode))))
 
 	source, err := newSource(cfg, in)
 	if err != nil {
@@ -84,7 +87,7 @@ func Run(cfg config.Config, in io.Reader, out, stderr io.Writer) (runErr error) 
 		return final.err
 	}
 	if ok {
-		finalizeRenderedBlock(out, final.View(), cfg.ClearOnExit)
+		finalizeRenderedBlock(out, final.View().Content, cfg.ClearOnExit)
 	}
 	return nil
 }
@@ -98,9 +101,9 @@ const (
 )
 
 // finalizeRenderedBlock settles the bar (and any detail rows) on screen once
-// the Bubble Tea program has finished. The renderer's shutdown
-// EraseEntireLine has already wiped the last rendered row and parked the
-// cursor at column 0 of it; the rows above are still visible.
+// the Bubble Tea program has finished. The renderer's shutdown moves the
+// cursor to column 0 of the last rendered row and erases from there to the
+// end of the screen, so that row is gone; the rows above are still visible.
 //
 // Non-clear: move the cursor up over the surviving rows, then rewrite every
 // row with an erase-to-end-of-line and a newline, so the block is restored
@@ -180,16 +183,29 @@ func newSource(cfg config.Config, stdin io.Reader) (input.Source, error) {
 }
 
 func autoProfile() render.Profile {
-	switch termenv.EnvColorProfile() {
-	case termenv.TrueColor:
+	switch colorprofile.Detect(os.Stdout, os.Environ()) {
+	case colorprofile.TrueColor:
 		return render.ProfileTrueColor
-	case termenv.ANSI256:
+	case colorprofile.ANSI256:
 		return render.Profile256
-	case termenv.ANSI:
+	case colorprofile.ANSI:
 		return render.Profile16
-	case termenv.Ascii:
+	case colorprofile.ASCII, colorprofile.NoTTY:
 		return render.ProfileNone
 	default:
 		return render.ProfileTrueColor
+	}
+}
+
+func teaProfile(profile render.Profile) colorprofile.Profile {
+	switch profile {
+	case render.Profile256:
+		return colorprofile.ANSI256
+	case render.Profile16:
+		return colorprofile.ANSI
+	case render.ProfileNone:
+		return colorprofile.ASCII
+	default:
+		return colorprofile.TrueColor
 	}
 }

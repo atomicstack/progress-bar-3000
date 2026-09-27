@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"progress-bar-3000/internal/config"
 	fmtx "progress-bar-3000/internal/format"
@@ -127,7 +127,7 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Bubble Tea opens /dev/tty and puts it in raw mode when stdin is a
 		// pipe, which means ctrl-c arrives as a key event instead of SIGINT.
 		// Forward it to Quit explicitly so the bar is interruptible.
@@ -206,7 +206,7 @@ func (m *Model) advancePhasesOffset() {
 	}
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	resolver := resolver{
 		animations:   m.animations,
 		cfg:          m.cfg,
@@ -227,8 +227,8 @@ func (m Model) View() string {
 	// prints. Bubble Tea drops lines from the TOP when a frame is taller than
 	// the terminal, so a padding row would push the bar off a 2-row pane.
 	// Run() restores (or erases) the block after the renderer's shutdown
-	// EraseEntireLine has wiped the last row; see finalizeRenderedBlock.
-	return strings.Join(rows, "\n")
+	// erase has wiped the last row; see finalizeRenderedBlock.
+	return tea.NewView(strings.Join(rows, "\n"))
 }
 
 type resolver struct {

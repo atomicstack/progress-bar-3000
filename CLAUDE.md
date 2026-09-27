@@ -28,13 +28,13 @@ Top-down flow on every run:
    - refuses to start unless stdout is a TTY
    - bootstraps a `progress.State` from `--total`, `--current`, `--phase-file`, etc.
    - resolves the color profile via `render.DetectProfile`
-   - constructs the Bubble Tea program from `NewModel(cfg, initial)`
+   - constructs the Bubble Tea v2 program (`charm.land/bubbletea/v2`) from `NewModel(cfg, initial)`, pinned to the resolved colour profile with `tea.WithColorProfile` so the renderer never downsamples an explicit `--color-mode`, and writing through `withEraseRows` (`erase.go`)
    - spawns a goroutine that pulls lines from an `input.Source`, parses each via `input.ParseLine`, and forwards `eventMsg`s into the program
    - the source is one of: stdin reader, stdin null-source (when stdin is an interactive TTY — Bubble Tea owns those bytes for key input), or a Unix socket listener (`--socket-path`)
-3. `internal/app.Model` (`model.go`) implements `tea.Model`. `View()` renders `cfg.Format` via the `fmtx` template, then appends:
+3. `internal/app.Model` (`model.go`) implements `tea.Model`. `View()` returns a `tea.View` whose `Content` renders `cfg.Format` via the `fmtx` template, then appends:
    - one fixed row per key in `--detail` (`detailRenderers` map: phase/value/label)
    - one templated row per `--detail-format` occurrence (parsed once in `NewModel`)
-   - no trailing newline: `View()` returns exactly the rendered rows joined by `\n`, so a frame occupies only the rows it prints and fits a 2-row tmux pane. After `program.Run()` returns, `finalizeRenderedBlock` in `run.go` rewrites the block row by row (or erases it row by row for `--clear-on-exit`). It deliberately avoids `CSI J`, which tmux treats as a full clear from the home position and scrolls the old rows into history, leaving a duplicate bar.
+   - no trailing newline: `View()` returns exactly the rendered rows joined by `\n`, so a frame occupies only the rows it prints and fits a 2-row tmux pane. After `program.Run()` returns, `finalizeRenderedBlock` in `run.go` rewrites the block row by row (or erases it row by row for `--clear-on-exit`). It deliberately avoids `CSI J`, which tmux treats as a full clear from the home position and scrolls the old rows into history, leaving a duplicate bar. Bubble Tea v2's renderer itself emits `CSI J` from the block's top row on every full redraw (first frame, resize) and from its last row on shutdown, so `withEraseRows` rewrites each one into a DECSC / per-row erase / DECRC sequence before it reaches the terminal. It must keep the output's `Fd()` so Bubble Tea still sees a TTY and handles resizes.
    - the `phases` token (`%{phases}`) is rendered by `render.RenderPhases`; the model keeps a lerped scroll offset (`phasesOffset`/`phasesTarget`) and the terminal width from `tea.WindowSizeMsg` for its default budget.
 
 ### Package responsibilities
@@ -62,4 +62,4 @@ Top-down flow on every run:
 
 - The full suite is fast (~1s); run `go test ./...` after any change to `internal/app`, `internal/config`, `internal/cli`, or `internal/format`.
 - `scripts/smoke.sh` is the manual visual check — it builds the binary, then drives several invocations and pauses between them. Use it when changing rendering, animations, or detail-row layout.
-- `model_test.go` uses `stripANSI(m.View())` to assert on textual content while ignoring colour escapes; follow that pattern for new render assertions.
+- `model_test.go` uses `stripANSI(m.View().Content)` to assert on textual content while ignoring colour escapes; follow that pattern for new render assertions.

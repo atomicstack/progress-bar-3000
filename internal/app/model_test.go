@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"progress-bar-3000/internal/config"
 	"progress-bar-3000/internal/input"
@@ -30,7 +30,7 @@ func TestModelViewCompactIncludesPhaseAndPercent(t *testing.T) {
 		Phases:       []string{"build", "test", "package", "ship"},
 	})
 
-	got := stripANSI(m.View())
+	got := stripANSI(m.View().Content)
 	if !strings.Contains(got, "50") {
 		t.Fatalf("View() = %q, want percent", got)
 	}
@@ -59,7 +59,7 @@ func TestDetailFormatRendersTemplateBelowBar(t *testing.T) {
 		Label:        "compiling widget.go",
 	})
 
-	got := stripANSI(m.View())
+	got := stripANSI(m.View().Content)
 	want := "phase: test [compiling widget.go]"
 	if !strings.Contains(got, want) {
 		t.Fatalf("View() = %q, want to contain %q", got, want)
@@ -87,7 +87,7 @@ func TestDetailFormatRendersAfterKeyedDetailRows(t *testing.T) {
 		Label:        "linking",
 	})
 
-	got := stripANSI(m.View())
+	got := stripANSI(m.View().Content)
 	phaseIdx := strings.Index(got, "phase: build")
 	customIdx := strings.Index(got, "custom: linking")
 	if phaseIdx < 0 || customIdx < 0 {
@@ -125,9 +125,9 @@ func TestModelPulseAnimationChangesView(t *testing.T) {
 	}
 
 	m := NewModel(cfg, progress.State{Total: 4, Value: 2, DisplayValue: 2})
-	before := m.View()
+	before := m.View().Content
 	next, _ := m.Update(frameMsg{Now: time.Unix(1, 0)})
-	after := next.(Model).View()
+	after := next.(Model).View().Content
 	if before == after {
 		t.Fatal("expected pulse animation to change rendered output")
 	}
@@ -146,9 +146,9 @@ func TestModelShimmerAnimationChangesView(t *testing.T) {
 	}
 
 	m := NewModel(cfg, progress.State{Total: 4, Value: 2, DisplayValue: 2})
-	before := m.View()
+	before := m.View().Content
 	next, _ := m.Update(frameMsg{Now: time.Unix(1, 0)})
-	after := next.(Model).View()
+	after := next.(Model).View().Content
 	if before == after {
 		t.Fatal("expected shimmer animation to change rendered output")
 	}
@@ -167,12 +167,12 @@ func TestModelCycleAnimationChangesViewAcrossFrames(t *testing.T) {
 	}
 
 	m := NewModel(cfg, progress.State{Total: 4, Value: 2, DisplayValue: 2})
-	first := m.View()
+	first := m.View().Content
 	next, _ := m.Update(frameMsg{Now: time.Unix(1, 0)})
 	second := next.(Model)
-	secondView := second.View()
+	secondView := second.View().Content
 	next, _ = second.Update(frameMsg{Now: time.Unix(2, 0)})
-	thirdView := next.(Model).View()
+	thirdView := next.(Model).View().Content
 
 	if first == secondView || secondView == thirdView || first == thirdView {
 		t.Fatalf("expected cycle animation to evolve across frames, got first=%q second=%q third=%q", first, secondView, thirdView)
@@ -204,7 +204,7 @@ func TestModelASCIIFlagForcesASCIIGlyphs(t *testing.T) {
 
 	m := NewModel(cfg, progress.State{Total: 8, Value: 3, DisplayValue: 3})
 
-	got := stripANSI(m.View())
+	got := stripANSI(m.View().Content)
 	want := "=..."
 	if got != want {
 		t.Fatalf("View() = %q, want %q", got, want)
@@ -216,7 +216,7 @@ func TestModelTimerRendersElapsedWholeSeconds(t *testing.T) {
 	m := NewModel(cfg, progress.State{Total: 4, StartedAt: time.Unix(100, 0)})
 
 	next, _ := m.Update(frameMsg{Now: time.Unix(165, 700_000_000)})
-	got := stripANSI(next.(Model).View())
+	got := stripANSI(next.(Model).View().Content)
 	want := "1m5s|1m5s"
 	if got != want {
 		t.Fatalf("View() = %q, want %q", got, want)
@@ -228,7 +228,7 @@ func TestModelTimerRendersZeroWhenStartUnknown(t *testing.T) {
 	m := NewModel(cfg, progress.State{Total: 4})
 
 	next, _ := m.Update(frameMsg{Now: time.Unix(165, 0)})
-	got := stripANSI(next.(Model).View())
+	got := stripANSI(next.(Model).View().Content)
 	if got != "0s" {
 		t.Fatalf("View() = %q, want %q", got, "0s")
 	}
@@ -253,7 +253,7 @@ func TestModelBarAndTotalFallBackToPhaseCount(t *testing.T) {
 		Phases:       []string{"build", "test", "package", "ship"},
 	})
 
-	got := stripANSI(m.View())
+	got := stripANSI(m.View().Content)
 	want := "==..|4\nvalue: 2/4"
 	if got != want {
 		t.Fatalf("View() = %q, want %q", got, want)
@@ -279,7 +279,7 @@ func TestModelViewRowsAreNotPaddedWithTrailingNewline(t *testing.T) {
 		Phases:       []string{"build", "test", "package", "ship"},
 	})
 
-	got := stripANSI(m.View())
+	got := stripANSI(m.View().Content)
 	if strings.HasSuffix(got, "\n") {
 		t.Fatalf("View() = %q, must not end with a newline: a padding row pushes the bar off a 2-row pane", got)
 	}
@@ -319,7 +319,7 @@ func TestModelPhasesTokenRendersStripWithCurrentHighlighted(t *testing.T) {
 		PhaseIndex:   1,
 	})
 
-	got := strings.TrimRight(firstLine(m.View()), " ")
+	got := strings.TrimRight(firstLine(m.View().Content), " ")
 	if got != "build › [test] › ship" {
 		t.Fatalf("View() = %q, want bracketed current phase under profile none", got)
 	}
@@ -328,7 +328,7 @@ func TestModelPhasesTokenRendersStripWithCurrentHighlighted(t *testing.T) {
 func TestModelPhasesTokenRendersEmptyWithoutPlan(t *testing.T) {
 	m := NewModel(phasesConfig("<%{phases}>"), progress.State{Total: 4, Value: 1, DisplayValue: 1})
 
-	if got := firstLine(m.View()); got != "<>" {
+	if got := firstLine(m.View().Content); got != "<>" {
 		t.Fatalf("View() = %q, want empty phases token without a plan", got)
 	}
 }
@@ -341,7 +341,7 @@ func TestModelPhasesTokenEmitsBoldAndColourWhenProfileAllows(t *testing.T) {
 		PhaseIndex: 1,
 	})
 
-	got := m.View()
+	got := m.View().Content
 	if !strings.Contains(got, "\x1b[1m") || !strings.Contains(got, "\x1b[38;2;") || !strings.Contains(got, "\x1b[2m") {
 		t.Fatalf("View() = %q, want bold, colour and dim escapes", got)
 	}
@@ -355,7 +355,7 @@ func TestModelPhasesTokenUsesASCIISeparator(t *testing.T) {
 	cfg.ASCII = true
 	m := NewModel(cfg, progress.State{Phases: []string{"build", "test"}, PhaseIndex: 0})
 
-	got := strings.TrimRight(firstLine(m.View()), " ")
+	got := strings.TrimRight(firstLine(m.View().Content), " ")
 	if got != "[build] > test" {
 		t.Fatalf("View() = %q, want ascii separator", got)
 	}
@@ -364,7 +364,7 @@ func TestModelPhasesTokenUsesASCIISeparator(t *testing.T) {
 func TestModelPhasesTokenFallsBackToEightyColumns(t *testing.T) {
 	m := NewModel(phasesConfig("%{phases}"), progress.State{Phases: []string{"build", "test"}, PhaseIndex: 0})
 
-	if got := len([]rune(firstLine(m.View()))); got != 80 {
+	if got := len([]rune(firstLine(m.View().Content))); got != 80 {
 		t.Fatalf("View() width = %d, want 80 before any WindowSizeMsg", got)
 	}
 }
@@ -373,7 +373,7 @@ func TestModelPhasesTokenUsesWindowSizeWidth(t *testing.T) {
 	m := NewModel(phasesConfig("%{phases}"), progress.State{Phases: []string{"build", "test"}, PhaseIndex: 0})
 
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 24, Height: 10})
-	got := firstLine(next.(Model).View())
+	got := firstLine(next.(Model).View().Content)
 	if len([]rune(got)) != 24 {
 		t.Fatalf("View() = %q (width %d), want the 24-column terminal width", got, len([]rune(got)))
 	}
@@ -383,7 +383,7 @@ func TestModelPhasesTokenWidthPrefixWinsOverTerminalWidth(t *testing.T) {
 	m := NewModel(phasesConfig("%30{phases}"), progress.State{Phases: []string{"build", "test"}, PhaseIndex: 0})
 
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 10})
-	got := firstLine(next.(Model).View())
+	got := firstLine(next.(Model).View().Content)
 	if len([]rune(got)) != 30 {
 		t.Fatalf("View() = %q (width %d), want the 30-column width prefix", got, len([]rune(got)))
 	}
@@ -394,7 +394,7 @@ func TestModelPhasesTokenWorksInDetailFormat(t *testing.T) {
 	cfg.DetailFormats = []string{"plan: %{phases}"}
 	m := NewModel(cfg, progress.State{Phases: []string{"build", "test"}, PhaseIndex: 1})
 
-	got := m.View()
+	got := m.View().Content
 	if !strings.Contains(got, "plan: build › [test]") {
 		t.Fatalf("View() = %q, want phases strip in the detail row", got)
 	}
@@ -427,7 +427,7 @@ func TestModelLerpsPhasesOffsetTowardTargetAndSnaps(t *testing.T) {
 	if settled.phasesOffset != float64(settled.phasesTarget) {
 		t.Fatalf("phasesOffset = %v, want to snap exactly onto %d", settled.phasesOffset, settled.phasesTarget)
 	}
-	if got := firstLine(settled.View()); !strings.Contains(got, "[hotel]") {
+	if got := firstLine(settled.View().Content); !strings.Contains(got, "[hotel]") {
 		t.Fatalf("View() = %q, want the current phase in view once settled", got)
 	}
 }
@@ -438,11 +438,11 @@ func TestModelPhasesHighlightPulsesOverTime(t *testing.T) {
 	m := NewModel(cfg, progress.State{Phases: []string{"build", "test"}, PhaseIndex: 0})
 
 	next, _ := m.Update(frameMsg{Now: time.Unix(10, 0)})
-	first := next.(Model).View()
+	first := next.(Model).View().Content
 	// #0087ff is fully saturated, so only the trough of the sine (1.5s into
 	// the 2s cycle) can move the colour.
 	next, _ = next.(Model).Update(frameMsg{Now: time.Unix(11, 500*int64(time.Millisecond))})
-	second := next.(Model).View()
+	second := next.(Model).View().Content
 	if first == second {
 		t.Fatal("expected the phases highlight colour to pulse between frames")
 	}
@@ -459,7 +459,7 @@ func TestModelPhasesCrossfadeSettlesAfterThreeHundredMilliseconds(t *testing.T) 
 	changed := time.Unix(10, 0)
 	next, _ := m.Update(eventMsg{Event: input.Event{Kind: input.KindPhase, PhaseName: "test"}, Now: changed})
 	next, _ = next.(Model).Update(frameMsg{Now: changed.Add(50 * time.Millisecond)})
-	mid := next.(Model).View()
+	mid := next.(Model).View().Content
 	// Mid-fade the previous phase is coloured, not dim.
 	buildIdx := strings.Index(mid, "build")
 	if strings.Contains(mid[:buildIdx], "\x1b[2m") {
@@ -467,7 +467,7 @@ func TestModelPhasesCrossfadeSettlesAfterThreeHundredMilliseconds(t *testing.T) 
 	}
 
 	next, _ = next.(Model).Update(frameMsg{Now: changed.Add(400 * time.Millisecond)})
-	settled := next.(Model).View()
+	settled := next.(Model).View().Content
 	buildIdx = strings.Index(settled, "build")
 	if !strings.Contains(settled[:buildIdx], "\x1b[2m") {
 		t.Fatalf("settled View() = %q, want previous phase dim after 300ms", settled)
