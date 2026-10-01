@@ -128,15 +128,18 @@ async function lock(rt: Runtime): Promise<() => void> {
 }
 
 // the checkout's own renderer: `make build` puts it in the repo root, the
-// directory above this mod's.
-function checkoutBinary(root: string): string {
-  const pluginDir = root.replace(/\/\.claude-plugin\/?$/, '').replace(/\/$/, '')
+// directory above this mod's. the mod's directory is resolved first, because
+// an install symlinked from ~/.claude/skills reports the link's path.
+async function checkoutBinary($: EngineInterface): Promise<string> {
+  const linked = $.plugin.root.replace(/\/\.claude-plugin\/?$/, '').replace(/\/$/, '')
+  const resolved = await $.process.run(['realpath', linked])
+  const pluginDir = resolved.exitCode === 0 && resolved.stdout.trim() !== '' ? resolved.stdout.trim() : linked
   return `${pluginDir.slice(0, pluginDir.lastIndexOf('/'))}/progress-bar-3000`
 }
 
 async function binaryPath($: EngineInterface, rt: Runtime): Promise<string> {
   if (rt.binary === '') {
-    return checkoutBinary($.plugin.root)
+    return checkoutBinary($)
   }
   if (!rt.binary.startsWith('~/')) {
     return rt.binary
@@ -189,11 +192,14 @@ function parseHandles(stdout: string): OwnedPane {
   return { pane, socket, pid, window }
 }
 
-async function openPane($: EngineInterface, bin: string, phases: string): Promise<OwnedPane> {
-  // tmux-start splits the pane claude runs in, whichever window is in view.
+// tmux-start splits the pane claude runs in, whichever window is in view.
+async function requireTmux($: EngineInterface): Promise<void> {
   if ((await $.env.get('TMUX')) === undefined || (await $.env.get('TMUX_PANE')) === undefined) {
     throw new Error('claude is not running inside tmux, so there is no pane to split')
   }
+}
+
+async function openPane($: EngineInterface, bin: string, phases: string): Promise<OwnedPane> {
   const started = await $.process.run([bin, 'tmux-start', '--phases', phases, '--width', 'full', '--output', 'json'], { timeoutMs: 15_000 })
   if (started.exitCode !== 0) {
     throw failure('tmux-start', started)
@@ -241,6 +247,9 @@ async function apply($: EngineInterface, rt: Runtime, lines: readonly string[]):
     const batch = parse(lines, pane === null)
     if (batch.close && pane === null) {
       return 'no bar is running'
+    }
+    if (pane === null) {
+      await requireTmux($)
     }
     const bin = await binaryPath($, rt)
     let opened = false

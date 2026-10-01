@@ -36,6 +36,10 @@ function fakeHost(on: On, env: Record<string, string> = { HOME: '/home/me', TMUX
       }
       return ok()
     }
+    // a symlinked install: the mod's directory resolves into the checkout.
+    if (argv[0] === 'realpath') {
+      return ok('/checkout/claude-code-mod\n')
+    }
     if (argv[0] === 'tmux' && argv[1] === 'display-message') {
       return ok(world.alive ? `${HANDLES.pid}\n` : '\n')
     }
@@ -53,11 +57,9 @@ const named = (world: World, ...prefix: string[]) =>
 test('without a binary option the mod runs the checkout binary beside its own directory', async ($, on) => {
   const world = fakeHost(on)
   await $.tool.call({ tool: TOOL, events: ['@set-phases a,b'] })
-  const bin = world.raw[0]?.[0] ?? ''
-  expect(bin.startsWith('/')).toBe(true)
-  expect(bin.startsWith('/home/me/')).toBe(false)
-  expect(bin.endsWith('/progress-bar-3000')).toBe(true)
-  expect(bin.includes('/.claude-plugin/')).toBe(false)
+  // resolved through any symlink, so ~/.claude/skills/<link> finds the checkout.
+  expect(named(world, 'realpath').length).toBe(1)
+  expect(world.raw.find(argv => argv[1] === 'tmux-start')?.[0]).toBe('/checkout/progress-bar-3000')
 })
 
 test('the first batch opens a pane with its plan, then sends the rest over the socket', async ($, on) => {
