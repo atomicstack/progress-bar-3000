@@ -1,0 +1,14 @@
+{
+  "name": "progress-bar-3000",
+  "version": "0.5.0",
+  "description": "drives the progress-bar-3000 renderer in a two-row tmux pane below claude code, through a tool the model calls",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "binary": {
+      "type": "string",
+      "title": "renderer binary",
+      "description": "path to the progress-bar-3000 binary (v0.4.0 or newer); empty for the one `make build` puts in the checkout above this mod; a leading ~/ is your home directory",
+      "default": ""
+    }
+  }
+}

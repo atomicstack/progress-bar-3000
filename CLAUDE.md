@@ -56,6 +56,8 @@ Top-down flow on every run:
 
 ## Skill / plugin coupling
 
+`claude-code-mod/` is a separate Claude Code plugin (a mod) that drives the binary through `tmux-start` and `send` from a `progress` tool. It uses the binary in the repo root (`make build`) unless its `binary` option says otherwise. Changes to `tmux-start`'s json handles, `send`'s exit codes or the event syntax need a matching edit there; run its tests with `claude plugin test claude-code-mod`. Codex and other agents still use the skill, so keep both.
+
 `skills/progress-bar-3000/SKILL.md` documents the CLI for agents and contains a tmux split-pane recipe. When you change a flag name, default, or output layout, update the skill in the same commit. The skill resolves the binary as `$CLAUDE_PLUGIN_ROOT/progress-bar-3000` when installed as a plugin and `./progress-bar-3000` in a repo checkout — keep both paths working.
 
 ## Testing notes

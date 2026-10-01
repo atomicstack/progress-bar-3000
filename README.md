@@ -290,6 +290,8 @@ see [one-call tmux bootstrap](#one-call-tmux-bootstrap) for defaults and returne
 
 [the bundled skill](skills/progress-bar-3000/SKILL.md) describes socket control, phase updates, and a dedicated two-row tmux pane. the repository also contains a claude code plugin manifest. release archives include the ready-to-run binary; source checkouts and source-based plugin installs need `make build` before using the skill.
 
+in claude code, [the tmux mod](claude-code-mod/README.md) can replace the skill. it gives the model one `progress` tool, then starts, updates and closes the pane itself.
+
 ## development
 
 ```sh
@@ -895,6 +897,16 @@ the skill triggers on requests like "show progress" or "add a progress bar"
 during multi-step work and drives the renderer using socket mode from a
 two-row pane at the bottom of the agent's tmux window. changes to flag
 names, defaults, or output layout need a matching edit to the skill.
+
+### claude code mod
+
+[`claude-code-mod/`](claude-code-mod/README.md) is a separate claude code
+plugin, a mod, that drives the same renderer without the skill. the model
+calls a single tool, `mcp__progress-bar-3000__progress`, and sends it the usual event
+lines. the mod runs `tmux-start` for the first batch and `send` for every batch after it. it
+closes only its own pane, either on `@close` or when the session ends. claude
+code draws nothing itself, so typing stays responsive. the skill is still the
+interface for other agents, such as codex.
 
 ## development
 
