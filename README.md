@@ -14,26 +14,26 @@ a terminal progress renderer for shell scripts and agents. send events over stdi
 
 download a pre-built binary from [github releases](https://github.com/atomicstack/progress-bar-3000/releases/latest). go and make are only needed when building from source. run it in a terminal on macos or linux; stdout must be a tty. a truecolour terminal gives the best results.
 
-| platform | v0.5.0 download |
+| platform | v0.6.0 download |
 |---|---|
-| macos, apple silicon | [darwin arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.5.0/progress-bar-3000_0.5.0_darwin_arm64.tar.gz) |
-| macos, intel | [darwin amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.5.0/progress-bar-3000_0.5.0_darwin_amd64.tar.gz) |
-| linux, x86-64 | [linux amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.5.0/progress-bar-3000_0.5.0_linux_amd64.tar.gz) |
-| linux, arm64 | [linux arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.5.0/progress-bar-3000_0.5.0_linux_arm64.tar.gz) |
+| macos, apple silicon | [darwin arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.6.0/progress-bar-3000_0.6.0_darwin_arm64.tar.gz) |
+| macos, intel | [darwin amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.6.0/progress-bar-3000_0.6.0_darwin_amd64.tar.gz) |
+| linux, x86-64 | [linux amd64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.6.0/progress-bar-3000_0.6.0_linux_amd64.tar.gz) |
+| linux, arm64 | [linux arm64](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.6.0/progress-bar-3000_0.6.0_linux_arm64.tar.gz) |
 
 extract the matching archive. for example, on an apple silicon mac:
 
 ```sh
 mkdir -p progress-bar-3000
-tar -xzf progress-bar-3000_0.5.0_darwin_arm64.tar.gz -C progress-bar-3000
+tar -xzf progress-bar-3000_0.6.0_darwin_arm64.tar.gz -C progress-bar-3000
 cd progress-bar-3000
 ./progress-bar-3000 --help
 ```
 
-each archive contains the executable, readme, license, demos, example phase files, and agent skill/plugin files. [checksums.txt](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.5.0/checksums.txt) contains sha256 hashes. from the download directory, verify the selected archive on macos:
+each archive contains the executable, readme, license, demos, example phase files, agent skill/plugin files, and the claude code mod. [checksums.txt](https://github.com/atomicstack/progress-bar-3000/releases/download/v0.6.0/checksums.txt) contains sha256 hashes. from the download directory, verify the selected archive on macos:
 
 ```sh
-archive=progress-bar-3000_0.5.0_darwin_arm64.tar.gz
+archive=progress-bar-3000_0.6.0_darwin_arm64.tar.gz
 awk -v archive="$archive" '$2 == archive' checksums.txt | shasum -a 256 -c -
 ```
 
@@ -63,6 +63,7 @@ make build
 
 ## recent changes
 
+- **v0.6.0:** a [claude code mod](claude-code-mod/README.md) that gives claude code one `progress` tool in place of the skill. the mod starts the tmux pane, sends each batch of events and closes the pane itself, and claude code draws nothing, so typing stays responsive. the skill is unchanged for codex and other agents.
 - **v0.5.0:** composable ambient and event animations (`--tint-animation interference,edge-glow,milestone-ripple`), an `--on-start` hook, opt-in `tmux-start --clear-border-format` (the border format is no longer cleared by default), and a move to bubble tea v2 that keeps redraws and resizes from leaving duplicate bars in tmux scrollback.
 - **v0.4.0:** acknowledged `send` batches, one-call `tmux-start`, full-viewport row sizing with `--width full`, descriptive socket path errors, and a streamlined agent skill.
 - **v0.3.0:** startup and runtime sub-phase plans, optional combined progress/parent/child updates, a new rgb sub-phase demo, and a default bar width of 90% of terminal columns that follows resizing.
